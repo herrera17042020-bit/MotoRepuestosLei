@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: motorepuestoslei-api
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SEED_DEMO_DATA
+        value: "false"
+      - key: APP_TIMEZONE
+        value: America/Managua
+      - key: DATABASE_URL
+        sync: false
+      - key: INVENTARIO_PASSWORD
+        sync: false
+      - key: RESUMEN_PASSWORD
+        sync: false
+      - key: VENTAS_MODIFICAR_PASSWORD
+        sync: false
+      - key: VENTAS_ELIMINAR_PASSWORD
+        sync: false
+      - key: AUTH_SECRET
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
