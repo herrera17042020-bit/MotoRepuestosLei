@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<title>MOTOREPUESTOS LEÍ · Sistema de ventas</title>
+<meta name="theme-color" content="#111111">
+<meta name="description" content="MOTOREPUESTOS LEÍ · Rueda bien. Rueda libre. Rueda seguro.">
+<link rel="icon" type="image/png" href="./assets/icons/favicon.png">
+<link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./css/styles.css">
+<link rel="stylesheet" href="./css/responsive.css">
+</head>
+<body>
+
+<div class="app-shell">
+
+  <aside class="sidebar">
+    <div class="sidebar-marca">
+      <span class="marca-emblema"><img src="./assets/images/logo-emblema.png" alt=""></span>
+      <span class="marca-textos">
+        <span class="marca-nombre">MOTOREPUESTOS LEÍ</span>
+        <span class="marca-lema">RUEDA BIEN. RUEDA LIBRE. RUEDA SEGURO.</span>
+      </span>
+    </div>
+    <nav class="sidebar-nav">
+      <button class="sidebar-item nav-activo" data-pantalla="venta"><span class="nav-icon">🧮</span> Nueva venta</button>
+      <button class="sidebar-item" data-pantalla="inicio"><span class="nav-icon">🏠</span> Inicio</button>
+      <button class="sidebar-item" data-pantalla="inventario"><span class="nav-icon">📦</span> Inventario</button>
+      <button class="sidebar-item" data-pantalla="ventas"><span class="nav-icon">🧾</span> Ventas</button>
+      <button class="sidebar-item" data-pantalla="resumen"><span class="nav-icon">📊</span> Resumen</button>
+    </nav>
+  </aside>
+
+  <div class="app-main">
+    <header class="topbar-movil">
+      <span class="marca-emblema"><img src="./assets/images/logo-emblema.png" alt=""></span>
+      <span class="marca-textos">
+        <span class="marca-nombre topbar-marca">MOTOREPUESTOS LEÍ</span>
+        <span class="marca-lema">RUEDA BIEN. RUEDA LIBRE. RUEDA SEGURO.</span>
+      </span>
+    </header>
+
+    <main class="contenido-app">
+      <section id="pantalla-inicio" class="pantalla"></section>
+      <section id="pantalla-venta" class="pantalla pantalla-activa"></section>
+      <section id="pantalla-inventario" class="pantalla"></section>
+      <section id="pantalla-ventas" class="pantalla"></section>
+      <section id="pantalla-resumen" class="pantalla"></section>
+    </main>
+
+    <nav class="bottom-nav">
+      <button class="nav-item nav-activo" data-pantalla="venta">
+        <span class="nav-icon">🧮</span><span class="nav-label">Venta</span>
+      </button>
+      <button class="nav-item" data-pantalla="inicio">
+        <span class="nav-icon">🏠</span><span class="nav-label">Inicio</span>
+      </button>
+      <button class="nav-item" data-pantalla="inventario">
+        <span class="nav-icon">📦</span><span class="nav-label">Inventario</span>
+      </button>
+      <button class="nav-item" data-pantalla="ventas">
+        <span class="nav-icon">🧾</span><span class="nav-label">Ventas</span>
+      </button>
+      <button class="nav-item" id="boton-nav-mas">
+        <span class="nav-icon">⋯</span><span class="nav-label">Más</span>
+      </button>
+    </nav>
+  </div>
+</div>
+
+<!-- Hoja "Más" (mobile): accesos adicionales -->
+<div class="hoja-inferior" id="hoja-mas">
+  <div class="hoja-fondo" id="hoja-mas-fondo"></div>
+  <div class="hoja-caja">
+    <button class="hoja-item" data-pantalla="resumen">
+      <span class="nav-icon">📊</span> Resumen
+    </button>
+  </div>
+</div>
+
+<!-- ==================== MODALES ==================== -->
+
+<!-- Producto rápido -->
+<div class="modal" id="modal-producto-rapido">
+  <div class="modal-fondo"></div>
+  <div class="modal-caja">
+    <div class="modal-encabezado">
+      <h3>Agregar producto rápido</h3>
+      <button class="modal-cerrar" onclick="UI.cerrarModal('modal-producto-rapido')">×</button>
+    </div>
+    <p class="modal-nota">No necesita estar registrado en el inventario para venderlo.</p>
+    <form id="form-producto-rapido" class="modal-cuerpo">
+      <label class="campo">
+        <span>Nombre del producto</span>
+        <input type="text" id="rapido-nombre" placeholder="Ej. Filtro de aceite" required>
+      </label>
+      <div class="campo-fila">
+        <label class="campo">
+          <span>Precio (C$)</span>
+          <input type="number" id="rapido-precio" min="1" step="1" placeholder="0" required>
+        </label>
+        <label class="campo">
+          <span>Cantidad</span>
+          <input type="number" id="rapido-cantidad" min="1" step="1" placeholder="Ej. 1" required>
+        </label>
+      </div>
+      <button type="submit" class="btn-primario btn-ancho-completo">Agregar a la venta</button>
+    </form>
+  </div>
+</div>
+
+<!-- Guardar producto rápido en inventario -->
+<div class="modal" id="modal-guardar-inventario">
+  <div class="modal-fondo"></div>
+  <div class="modal-caja">
+    <div class="modal-encabezado">
+      <h3>Guardar en inventario</h3>
+      <button class="modal-cerrar" onclick="UI.cerrarModal('modal-guardar-inventario')">×</button>
+    </div>
+    <form id="form-guardar-inventario" class="modal-cuerpo">
+      <label class="campo">
+        <span>Nombre del producto</span>
+        <input type="text" id="guardar-inv-nombre" readonly>
+      </label>
+      <div class="campo-fila">
+        <label class="campo">
+          <span>Precio (C$)</span>
+          <input type="number" id="guardar-inv-precio" min="1" step="1" required>
+        </label>
+        <label class="campo">
+          <span>Categoría</span>
+          <select id="guardar-inv-categoria" required></select>
+        </label>
+      </div>
+      <label class="campo">
+        <span>Cantidad inicial</span>
+        <input type="number" id="guardar-inv-stock" min="0" step="1" value="0" required>
+        <small class="campo-ayuda">Ejemplo: 2 jabones con precio de C$100.</small>
+      </label>
+      <button type="submit" class="btn-primario btn-ancho-completo">Guardar en inventario</button>
+    </form>
+  </div>
+</div>
+
+<!-- Confirmar venta -->
+<div class="modal" id="modal-confirmar-venta">
+  <div class="modal-fondo"></div>
+  <div class="modal-caja modal-caja-angosta">
+    <div class="modal-encabezado">
+      <h3>¿Confirmar esta venta?</h3>
+      <button class="modal-cerrar" onclick="UI.cerrarModal('modal-confirmar-venta')">×</button>
+    </div>
+    <div class="modal-cuerpo">
+      <div class="resumen-confirmacion">
+        <div class="resumen-confirmacion-fila">
+          <span>Productos</span>
+          <span id="confirmar-venta-cantidad">0</span>
+        </div>
+        <div class="resumen-confirmacion-fila resumen-confirmacion-total">
+          <span>Total</span>
+          <span id="confirmar-venta-total">C$0.00</span>
+        </div>
+      </div>
+      <div class="modal-botones">
+        <button class="btn-secundario btn-ancho-completo" id="btn-cancelar-confirmar-venta">Cancelar</button>
+        <button class="btn-primario btn-ancho-completo" id="btn-aceptar-confirmar-venta">Confirmar venta</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Guardar productos rápidos en inventario -->
+<div class="modal" id="modal-guardar-productos-rapidos">
+  <div class="modal-fondo"></div>
+  <div class="modal-caja modal-caja-angosta">
+    <div class="modal-encabezado">
+      <h3>Guardar producto(s) rápido(s)</h3>
+      <button class="modal-cerrar" onclick="UI.cerrarModal('modal-guardar-productos-rapidos')">×</button>
+    </div>
+    <div class="modal-cuerpo">
+      <p class="modal-nota" id="texto-guardar-productos-rapidos">Hay productos sin inventario. ¿Quieres guardarlos para futuras ventas?</p>
+      <div class="modal-botones">
+        <button class="btn-secundario btn-ancho-completo" id="btn-no-guardar-productos-rapidos">No, solo registrar la venta</button>
+        <button class="btn-primario btn-ancho-completo" id="btn-si-guardar-productos-rapidos">Sí, guardarlos</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Éxito de venta -->
+<div class="modal" id="modal-exito-venta">
+  <div class="modal-fondo"></div>
+  <div class="modal-caja modal-caja-angosta modal-exito">
+    <div class="modal-cuerpo modal-cuerpo-centrado">
+      <div class="icono-exito">✓</div>
+      <h3>Venta registrada</h3>
+      <p class="exito-folio" id="exito-venta-folio">Venta #0000</p>
+      <p class="exito-total" id="exito-venta-total">C$0.00</p>
+      <div class="modal-botones">
+        <button class="btn-secundario btn-ancho-completo" id="btn-exito-ver-venta">Ver venta</button>
+        <button class="btn-primario btn-ancho-completo" id="btn-exito-nueva-venta">Nueva venta</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Nuevo / Editar producto -->
+<div class="modal" id="modal-producto">
+  <div class="modal-fondo"></div>
+  <div class="modal-caja">
+    <div class="modal-encabezado">
+      <h3 id="titulo-modal-producto">Nuevo producto</h3>
+      <button class="modal-cerrar" onclick="UI.cerrarModal('modal-producto')">×</button>
+    </div>
+    <form id="form-producto" class="modal-cuerpo">
+      <label class="campo">
+        <span>Nombre</span>
+        <input type="text" id="producto-nombre" placeholder="Ej. Pastilla de frenoe freno" required>
+      </label>
+      <label class="campo">
+        <span>Categoría</span>
+        <select id="producto-categoria" required></select>
+      </label>
+      <div class="campo-fila">
+        <label class="campo">
+          <span>Precio (C$)</span>
+          <input type="number" id="producto-precio" min="1" step="1" placeholder="0" required>
+        </label>
+        <label class="campo campo-cantidad-inicial">
+          <span>Cantidad inicial</span>
+          <input type="number" id="producto-stock" min="0" step="1" placeholder="0" required>
+        </label>
+      </div>
+      <button type="submit" class="btn-primario btn-ancho-completo">Guardar producto</button>
+    </form>
+  </div>
+</div>
+
+<!-- Agregar stock -->
+<div class="modal" id="modal-agregar-stock">
+  <div class="modal-fondo"></div>
+  <div class="modal-caja modal-caja-angosta">
+    <div class="modal-encabezado">
+      <h3>Agregar existencias</h3>
+      <button class="modal-cerrar" onclick="UI.cerrarModal('modal-agregar-stock')">×</button>
+    </div>
+    <form id="form-agregar-stock" class="modal-cuerpo">
+      <p class="agregar-stock-nombre" id="agregar-stock-nombre"></p>
+      <p class="agregar-stock-actual" id="agregar-stock-actual"></p>
+      <label class="campo">
+        <span>Cantidad a agregar</span>
+        <input type="number" id="agregar-stock-cantidad" min="1" step="1" placeholder="0" required>
+      </label>
+      <button type="submit" class="btn-primario btn-ancho-completo">Agregar</button>
+    </form>
+  </div>
+</div>
+
+<!-- Detalle de venta -->
+<div class="modal" id="modal-detalle-venta">
+  <div class="modal-fondo"></div>
+  <div class="modal-caja">
+    <div class="modal-encabezado">
+      <h3 id="detalle-venta-folio">Venta #0000</h3>
+      <button class="modal-cerrar" onclick="UI.cerrarModal('modal-detalle-venta')">×</button>
+    </div>
+    <div class="modal-cuerpo">
+      <p class="detalle-venta-fecha" id="detalle-venta-fecha"></p>
+      <div class="detalle-venta-items" id="detalle-venta-items"></div>
+      <div class="detalle-venta-total-fila">
+        <span>TOTAL</span>
+        <span id="detalle-venta-total">C$0.00</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Contraseña (inventario / resumen / modificar venta / eliminar venta) -->
+<div class="modal modal-centrado" id="modal-password">
+  <div class="modal-fondo"></div>
+  <div class="modal-caja modal-caja-angosta modal-password-caja" role="dialog" aria-modal="true" aria-labelledby="password-titulo">
+    <button type="button" class="modal-cerrar modal-cerrar-flotante" onclick="UI.cerrarModal('modal-password')" aria-label="Cerrar">×</button>
+    <img class="modal-logo" src="./assets/images/logo.png" alt="MOTOREPUESTOS LEÍ">
+    <h3 id="password-titulo">Acceso al inventario</h3>
+    <p class="modal-nota modal-nota-centrada" id="password-subtitulo">Ingrese la contraseña para continuar</p>
+    <form id="form-password" class="modal-cuerpo" autocomplete="off">
+      <div class="campo">
+        <label for="password-input" id="password-etiqueta">Contraseña</label>
+        <div class="campo-password">
+          <input type="password" id="password-input" autocomplete="new-password" autocapitalize="off" spellcheck="false" aria-describedby="password-error">
+          <button type="button" class="btn-ver-password" id="password-ver" aria-label="Mostrar contraseña" aria-pressed="false">👁</button>
+        </div>
+      </div>
+      <p class="password-error" id="password-error" role="alert" hidden></p>
+      <button type="submit" class="btn-primario btn-ancho-completo btn-mayusculas" id="password-enviar">Ingresar</button>
+      <button type="button" class="btn-secundario btn-ancho-completo btn-mayusculas" id="password-cancelar">Cancelar</button>
+    </form>
+  </div>
+</div>
+
+<!-- Editar venta del día -->
+<div class="modal" id="modal-editar-venta">
+  <div class="modal-fondo-fijo"></div>
+  <div class="modal-caja modal-caja-ancha" role="dialog" aria-modal="true" aria-labelledby="editar-venta-titulo">
+    <div class="modal-encabezado">
+      <h3 id="editar-venta-titulo">Modificar venta</h3>
+      <button type="button" class="modal-cerrar" id="editar-venta-cerrar" aria-label="Cerrar">×</button>
+    </div>
+    <p class="modal-nota" id="editar-venta-fecha"></p>
+    <p class="editar-aviso">El total se recalcula solo y el inventario se ajusta al guardar. No se puede dejar cantidades negativas ni superar el stock disponible.</p>
+    <div class="editar-lineas" id="editar-venta-lineas"></div>
+    <div class="editar-agregar">
+      <div class="buscador-venta">
+        <span class="buscador-icono">🔍</span>
+        <input type="search" id="editar-venta-buscar" placeholder="Agregar producto del inventario..." autocomplete="off">
+      </div>
+      <div class="editar-resultados" id="editar-venta-resultados"></div>
+    </div>
+    <div class="detalle-venta-total-fila editar-total">
+      <span>TOTAL</span>
+      <span id="editar-venta-total">C$0</span>
+    </div>
+    <p class="editar-error" id="editar-venta-error" role="alert" hidden></p>
+    <div class="modal-botones">
+      <button type="button" class="btn-secundario btn-ancho-completo" id="editar-venta-cancelar">Cancelar</button>
+      <button type="button" class="btn-primario btn-ancho-completo" id="editar-venta-guardar">Guardar cambios</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirmación genérica (guardar cambios, eliminar venta) -->
+<div class="modal modal-centrado" id="modal-confirmar">
+  <div class="modal-fondo"></div>
+  <div class="modal-caja modal-caja-angosta" role="alertdialog" aria-modal="true" aria-labelledby="confirmar-titulo" aria-describedby="confirmar-mensaje">
+    <h3 id="confirmar-titulo"></h3>
+    <p class="modal-nota" id="confirmar-mensaje"></p>
+    <p class="confirmar-detalle" id="confirmar-detalle" hidden></p>
+    <div class="modal-botones">
+      <button type="button" class="btn-secundario btn-ancho-completo" id="confirmar-cancelar">Cancelar</button>
+      <button type="button" class="btn-primario btn-ancho-completo" id="confirmar-aceptar">Aceptar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<script>
+  window.DEMO_DATA_HABILITADA = false;
+</script>
+<script src="./js/app-config.js"></script>
+<script src="./js/ventas-logica.js"></script>
+<script src="./js/storage.js"></script>
+<script src="./js/ui.js"></script>
+<script src="./js/security-config.js"></script>
+<script src="./js/security.js"></script>
+<script src="./js/dashboard.js"></script>
+<script src="./js/editar-venta.js"></script>
+<script src="./js/historial.js"></script>
+<script src="./js/ventas.js"></script>
+<script src="./js/inventario.js"></script>
+<script src="./js/resumen.js"></script>
+<script src="./js/app.js"></script>
+</body>
+</html>

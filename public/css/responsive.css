@@ -1,0 +1,109 @@
+/* =========================================================================
+   TABLET (>= 700px): más columnas en las cuadrículas
+   ========================================================================= */
+@media (min-width: 700px) {
+  .fila-venta-acciones { justify-content: flex-end; }
+  .btn-accion { flex: 0 0 auto; min-width: 140px; }
+  .grid-stats { grid-template-columns: repeat(4, 1fr); }
+  .grid-productos { grid-template-columns: repeat(3, 1fr); }
+
+  .contenido-app { padding-left: 24px; padding-right: 24px; }
+}
+
+@media (max-width: 699px) {
+  .venta-carrito.carrito-expandido { width: calc(100vw - 24px); min-width: calc(100vw - 24px); }
+}
+
+/* =========================================================================
+   ESCRITORIO (>= 980px): sidebar fijo, sin nav inferior, layout dividido
+   ========================================================================= */
+@media (min-width: 980px) {
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    width: 244px;
+    flex-shrink: 0;
+    background: var(--color-negro);
+    border-right: 3px solid var(--color-primary);
+    height: 100vh;
+    position: sticky;
+    top: 0;
+    padding: 20px 14px;
+  }
+
+  .sidebar-marca {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 6px 22px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid #333333;
+  }
+
+  .sidebar-marca .marca-nombre { font-size: 0.95rem; white-space: normal; }
+  .sidebar-marca .marca-emblema { width: 42px; height: 32px; }
+  .sidebar-marca .marca-lema { white-space: normal; font-size: 0.5rem; line-height: 1.35; overflow: visible; }
+
+  .sidebar-nav { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+
+  .sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 12px;
+    border-radius: var(--radio-chico);
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: #C8C8C8;
+    text-align: left;
+    border-left: 3px solid transparent;
+  }
+
+  .sidebar-item:hover { background: var(--color-negro-suave); color: #FFFFFF; }
+
+  .sidebar-item.nav-activo {
+    color: #FFFFFF;
+    font-weight: 700;
+    border-left-color: var(--color-primary);
+    background: #262626;
+  }
+
+  .topbar-movil, .bottom-nav, .hoja-inferior { display: none; }
+
+  .contenido-app {
+    padding: 32px 36px 48px;
+    max-width: 1200px;
+  }
+
+  .grid-stats { grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .tarjeta-stat { padding: 18px; }
+  .stat-valor { font-size: 1.75rem; }
+
+  .grid-productos { grid-template-columns: repeat(3, 1fr); }
+
+  /* ---- Nueva venta: panel flotante de carrito --------------------------- */
+  .venta-layout { display: block; }
+  .venta-panel-productos { min-width: 0; padding-right: 384px; }
+  .carrito-cuerpo { padding: 16px; }
+
+  /* ---- Inventario: filas mas anchas, columnas alineadas ----------------- */
+  .fila-inventario-principal,
+  .fila-inventario {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr auto auto;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .fila-inventario { padding: 14px 18px; }
+
+  .fila-inventario-principal > div:first-child { grid-column: 1; }
+  .fila-inventario-precio { grid-column: 2; text-align: right; }
+  .fila-inventario-secundaria { display: contents; }
+  .fila-inventario-secundaria .etiqueta { grid-column: 3; justify-self: start; }
+  .fila-inventario-stock { grid-column: 4; }
+  .fila-inventario-acciones { grid-column: 5 / span 2; margin-top: 0; }
+
+  /* ---- Resumen: grafico mas alto ---------------------------------------- */
+  .grafico-barras { height: 220px; }
+}

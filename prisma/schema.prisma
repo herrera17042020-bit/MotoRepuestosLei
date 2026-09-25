@@ -1,0 +1,86 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// NOTA: los nombres de las tablas fisicas estan en minusculas para conservar
+// compatibilidad con la base PostgreSQL del proyecto.
+// y los nombres de indices/llaves foraneas conservan el formato original de Prisma.
+// Por eso cada modelo lleva @@map y cada indice/relacion lleva `map:`.
+
+model Categoria {
+  id        String     @id @default(uuid())
+  nombre    String     @unique(map: "Categoria_nombre_key")
+  productos Producto[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@map("categoria")
+}
+
+model Producto {
+  id          String      @id @default(uuid())
+  nombre      String
+  categoriaId String
+  categoria   Categoria   @relation(fields: [categoriaId], references: [id], onDelete: Restrict, map: "Producto_categoriaId_fkey")
+  precio      Decimal     @db.Decimal(10, 2)
+  stock       Int         @default(0)
+  activo      Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  items       VentaItem[]
+
+  @@index([activo], map: "Producto_activo_idx")
+  @@index([categoriaId], map: "Producto_categoriaId_idx")
+  @@map("producto")
+}
+
+model Usuario {
+  id        String   @id @default(uuid())
+  nombre    String
+  email     String?  @unique
+  rol       String   @default("vendedor")
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ventas    Venta[]
+
+  @@map("usuario")
+}
+
+model Venta {
+  id           Int         @id @default(autoincrement())
+  fecha        DateTime    @default(now())
+  total        Decimal     @db.Decimal(10, 2)
+  usuarioId    String?
+  usuario      Usuario?    @relation(fields: [usuarioId], references: [id], onDelete: SetNull, map: "Venta_usuarioId_fkey")
+  createdAt    DateTime    @default(now())
+  // Auditoria: se llena solo cuando una venta del dia se modifica con autorizacion.
+  modificadaAt DateTime?
+  items        VentaItem[]
+
+  @@index([usuarioId], map: "Venta_usuarioId_idx")
+  @@map("venta")
+}
+
+model VentaItem {
+  id             String    @id @default(uuid())
+  ventaId        Int
+  venta          Venta     @relation(fields: [ventaId], references: [id], onDelete: Cascade, map: "VentaItem_ventaId_fkey")
+  productoId     String?
+  producto       Producto? @relation(fields: [productoId], references: [id], onDelete: Restrict, map: "VentaItem_productoId_fkey")
+  nombre         String
+  cantidad       Int
+  precioUnitario Decimal   @db.Decimal(10, 2)
+  subtotal       Decimal   @db.Decimal(10, 2)
+  esRapido       Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+
+  @@index([productoId], map: "VentaItem_productoId_idx")
+  @@index([ventaId], map: "VentaItem_ventaId_idx")
+  @@map("ventaitem")
+}

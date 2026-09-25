@@ -1,0 +1,3146 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<title>Distribuidora · Sistema de ventas</title>
+<style>
+/* =========================================================================
+   TOKENS DE DISEÑO
+   Paleta inspirada en el mundo de la distribuidora: verde de billete/cosecha,
+   mostaza de etiqueta de bodega, papel de recibo. Los precios y totales usan
+   una tipografia monoespaciada para que se sientan como un ticket de caja.
+   ========================================================================= */
+:root {
+  --color-bg: #F1F3EC;
+  --color-bg-alt: #E7EADD;
+  --color-surface: #FFFFFF;
+  --color-primary: #2F6B3C;
+  --color-primary-dark: #234F2C;
+  --color-primary-bg: #E7F0E4;
+  --color-accent: #E3A008;
+  --color-accent-dark: #B87F04;
+  --color-text: #1F2A22;
+  --color-text-muted: #5C6A5F;
+  --color-border: #D8D3C6;
+  --color-danger: #B3261E;
+  --color-danger-bg: #FBE9E7;
+  --color-warn: #C77700;
+  --color-warn-bg: #FFF3DC;
+
+  --fuente-display: -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  --fuente-cuerpo: -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  --fuente-mono: 'Courier New', Consolas, monospace;
+
+  --radio-chico: 3px;
+  --radio-medio: 4px;
+  --sombra-baja: none;
+  --sombra-media: 0 2px 8px rgba(31, 42, 34, 0.10);
+  --alto-nav-inferior: 64px;
+  --alto-topbar: 56px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--fuente-cuerpo);
+  background: var(--color-bg);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 {
+  font-family: var(--fuente-cuerpo);
+  font-weight: 600;
+  margin: 0;
+  color: var(--color-text);
+}
+
+h2 { font-size: 1.5rem; }
+h3 { font-size: 1.15rem; }
+
+p { margin: 0; }
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+input, select, textarea {
+  font-family: inherit;
+  font-size: 1rem;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}
+
+/* =========================================================================
+   ESTRUCTURA GENERAL
+   ========================================================================= */
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+}
+
+.sidebar { display: none; } /* se activa en responsive.css desde el breakpoint de escritorio */
+
+.app-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.topbar-movil {
+  height: var(--alto-topbar);
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  background: var(--color-primary);
+  color: white;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.topbar-marca {
+  font-family: var(--fuente-display);
+  font-size: 1.2rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.contenido-app {
+  flex: 1;
+  padding: 16px 16px calc(var(--alto-nav-inferior) + 24px);
+  max-width: 1100px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.pantalla { display: none; }
+.pantalla-activa { display: block; animation: aparecer 0.18s ease-out; }
+
+@keyframes aparecer {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ---- navegacion inferior (movil) --------------------------------------- */
+
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: var(--alto-nav-inferior);
+  display: flex;
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+  z-index: 30;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.nav-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: var(--color-text-muted);
+  font-size: 0.68rem;
+  font-weight: 500;
+}
+
+.nav-item .nav-icon { font-size: 1.25rem; line-height: 1; }
+.nav-item.nav-activo { color: var(--color-primary); }
+.nav-item.nav-activo .nav-icon { transform: translateY(-1px); }
+
+/* ---- hoja inferior "Mas" ------------------------------------------------ */
+
+.hoja-inferior {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.hoja-inferior.hoja-abierta { visibility: visible; pointer-events: auto; }
+
+.hoja-fondo {
+  position: absolute;
+  inset: 0;
+  background: rgba(31, 42, 34, 0.4);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.hoja-inferior.hoja-abierta .hoja-fondo { opacity: 1; }
+
+.hoja-caja {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--color-surface);
+  border-radius: 16px 16px 0 0;
+  padding: 12px 16px calc(20px + env(safe-area-inset-bottom));
+  transform: translateY(100%);
+  transition: transform 0.22s ease;
+}
+
+.hoja-inferior.hoja-abierta .hoja-caja { transform: translateY(0); }
+
+.hoja-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 8px;
+  font-size: 1rem;
+  color: var(--color-text);
+  border-radius: var(--radio-medio);
+}
+
+.hoja-item:active { background: var(--color-bg-alt); }
+
+/* =========================================================================
+   ENCABEZADOS DE PANTALLA Y BLOQUES COMUNES
+   ========================================================================= */
+
+.encabezado-pantalla { margin-bottom: 16px; }
+.encabezado-con-boton { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.encabezado-venta { margin-bottom: 12px; }
+
+.texto-saludo {
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  margin-bottom: 2px;
+}
+
+.seccion-bloque { margin-top: 24px; }
+
+.titulo-seccion-fila {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.enlace-boton {
+  color: var(--color-primary);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.enlace-peligro { color: var(--color-danger); }
+
+.estado-vacio {
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  padding: 20px 4px;
+  text-align: center;
+}
+
+.estado-vacio-grid { grid-column: 1 / -1; }
+
+/* ---- etiquetas de estado ------------------------------------------------ */
+
+.etiqueta {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: var(--radio-chico);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.etiqueta-aviso { background: var(--color-warn-bg); color: var(--color-warn); }
+.etiqueta-exito { background: var(--color-primary-bg); color: var(--color-primary-dark); }
+.etiqueta-peligro { background: var(--color-danger-bg); color: var(--color-danger); }
+.etiqueta-rapido {
+  background: var(--color-accent);
+  color: #392900;
+  border: none;
+}
+.etiqueta-rapido-mini {
+  background: var(--color-accent);
+  color: #392900;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+/* =========================================================================
+   TARJETAS DE ESTADISTICAS (INICIO / RESUMEN)
+   ========================================================================= */
+
+.grid-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.tarjeta-stat {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radio-medio);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tarjeta-stat-aviso { border-color: var(--color-warn); }
+
+.stat-etiqueta {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
+
+.stat-valor {
+  font-family: var(--fuente-mono);
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.stat-valor-dinero { color: var(--color-primary-dark); }
+
+/* ---- actividad reciente -------------------------------------------------- */
+
+.lista-actividad, .lista-poco-stock {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radio-medio);
+  overflow: hidden;
+}
+
+.fila-actividad {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px dashed var(--color-border);
+  text-align: left;
+}
+
+.fila-actividad:last-child { border-bottom: none; }
+.fila-actividad:active { background: var(--color-bg-alt); }
+
+.fila-actividad-titulo { display: block; font-weight: 600; font-size: 0.92rem; }
+.fila-actividad-fecha { display: block; color: var(--color-text-muted); font-size: 0.78rem; margin-top: 1px; }
+.fila-actividad-monto { font-family: var(--fuente-mono); font-weight: 600; }
+
+.fila-poco-stock {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px dashed var(--color-border);
+  font-size: 0.92rem;
+}
+
+.fila-poco-stock:last-child { border-bottom: none; }
+
+/* =========================================================================
+   PANTALLA: NUEVA VENTA
+   ========================================================================= */
+
+.venta-layout {
+  display: flex;
+  flex-direction: column;
+}
+
+.buscador-venta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radio-medio);
+  padding: 10px 14px;
+  margin-bottom: 12px;
+}
+
+.buscador-icono { opacity: 0.6; }
+
+.buscador-venta input {
+  border: none;
+  background: none;
+  flex: 1;
+  font-size: 0.95rem;
+  color: var(--color-text);
+}
+
+.buscador-venta input:focus { outline: none; }
+
+.btn-producto-rapido {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--color-accent);
+  color: #392900;
+  font-weight: 700;
+  padding: 10px 14px;
+  border-radius: var(--radio-medio);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.btn-producto-rapido span { font-size: 1.1rem; line-height: 1; }
+.btn-producto-rapido:active { background: var(--color-accent-dark); }
+
+.chips-categoria {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  margin-bottom: 12px;
+  scrollbar-width: none;
+}
+
+.chips-categoria::-webkit-scrollbar { display: none; }
+
+.chip {
+  flex-shrink: 0;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.chip-activo {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: white;
+}
+
+.grid-productos {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.tarjeta-producto {
+  position: relative;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radio-medio);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.tarjeta-producto-agotada { opacity: 0.55; }
+
+.tarjeta-producto-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: var(--color-warn-bg);
+  color: var(--color-warn);
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.tarjeta-producto-badge-agotado {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.tarjeta-producto-nombre {
+  font-weight: 600;
+  font-size: 0.9rem;
+  padding-right: 40px;
+}
+
+.tarjeta-producto-precio {
+  font-family: var(--fuente-mono);
+  color: var(--color-primary-dark);
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.tarjeta-producto-stock {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.tarjeta-producto-boton {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: white;
+  font-size: 1.3rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.tarjeta-producto-boton:active { background: var(--color-primary-dark); }
+.tarjeta-producto-boton:disabled { background: var(--color-border); cursor: not-allowed; }
+
+/* ---- carrito (hoja inferior en movil) ----------------------------------- */
+
+.venta-carrito {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: var(--alto-nav-inferior);
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+  border-radius: 14px 14px 0 0;
+  box-shadow: var(--sombra-media);
+  z-index: 25;
+  transform: translateY(calc(100% - 54px));
+  transition: transform 0.24s ease;
+  max-height: 78vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.venta-carrito.carrito-expandido { transform: translateY(0); }
+
+.carrito-peek {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  flex-shrink: 0;
+}
+
+.carrito-peek-info { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; }
+.carrito-peek-cantidad { font-size: 0.78rem; color: var(--color-text-muted); }
+.carrito-peek-total { font-family: var(--fuente-mono); font-weight: 700; font-size: 1.1rem; }
+.carrito-peek-flecha {
+  color: var(--color-text-muted);
+  transition: transform 0.2s ease;
+}
+.carrito-expandido .carrito-peek-flecha { transform: rotate(180deg); }
+
+.carrito-cuerpo {
+  padding: 0 16px 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.carrito-titulo-fila {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 8px;
+}
+
+.carrito-items {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 60px;
+}
+
+.item-carrito {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas: "info controles" "precios eliminar";
+  align-items: center;
+  gap: 4px 10px;
+  padding: 10px 0;
+  border-bottom: 1px dashed var(--color-border);
+}
+
+.item-carrito:last-child { border-bottom: none; }
+
+.item-carrito-info { grid-area: info; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.item-carrito-nombre { font-weight: 600; font-size: 0.9rem; }
+
+.item-carrito-controles {
+  grid-area: controles;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-cantidad {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.item-carrito-cantidad {
+  min-width: 18px;
+  text-align: center;
+  font-family: var(--fuente-mono);
+  font-weight: 600;
+}
+
+.item-carrito-precios {
+  grid-area: precios;
+  display: flex;
+  gap: 10px;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  font-family: var(--fuente-mono);
+}
+
+.item-carrito-preciounit { opacity: 0.85; }
+.item-carrito-subtotal { color: var(--color-text); font-weight: 600; }
+
+.item-carrito-eliminar {
+  grid-area: eliminar;
+  justify-self: end;
+  font-size: 0.95rem;
+  color: var(--color-danger);
+  opacity: 0.8;
+}
+
+.carrito-total-fila {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  font-family: var(--fuente-mono);
+  font-weight: 700;
+  font-size: 1.15rem;
+  border-top: 1px solid var(--color-border);
+  margin-top: 4px;
+}
+
+.btn-confirmar-venta {
+  width: 100%;
+  background: var(--color-primary);
+  color: white;
+  padding: 14px;
+  border-radius: var(--radio-medio);
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.btn-confirmar-venta:active { background: var(--color-primary-dark); }
+.btn-confirmar-venta:disabled { background: var(--color-border); color: var(--color-text-muted); cursor: not-allowed; }
+
+/* =========================================================================
+   PANTALLA: INVENTARIO
+   ========================================================================= */
+
+.lista-inventario { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+
+.fila-inventario {
+  position: relative;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radio-medio);
+  padding: 12px 14px;
+}
+
+.fila-inventario-eliminar {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-danger);
+  opacity: 0.75;
+  font-size: 0.9rem;
+}
+
+.fila-inventario-eliminar:hover,
+.fila-inventario-eliminar:active {
+  background: var(--color-danger-bg);
+  opacity: 1;
+}
+
+.fila-inventario-principal {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding-right: 30px;
+}
+
+.fila-inventario-nombre { display: block; font-weight: 600; }
+.fila-inventario-categoria { display: block; font-size: 0.78rem; color: var(--color-text-muted); margin-top: 1px; }
+.fila-inventario-precio { font-family: var(--fuente-mono); font-weight: 600; color: var(--color-primary-dark); white-space: nowrap; }
+
+.fila-inventario-secundaria {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.fila-inventario-stock { font-size: 0.82rem; color: var(--color-text-muted); }
+
+.fila-inventario-acciones {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.btn-secundario {
+  flex: 1;
+  padding: 9px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radio-chico);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--color-text);
+  background: var(--color-bg);
+  text-align: center;
+}
+
+.btn-secundario:active { background: var(--color-bg-alt); }
+
+.btn-primario {
+  padding: 10px 16px;
+  background: var(--color-primary);
+  color: white;
+  border-radius: var(--radio-medio);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.btn-primario:active { background: var(--color-primary-dark); }
+
+.btn-ancho-completo { width: 100%; }
+
+/* =========================================================================
+   PANTALLA: VENTAS (HISTORIAL)
+   ========================================================================= */
+
+.lista-ventas { display: flex; flex-direction: column; gap: 8px; }
+
+.fila-venta {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radio-medio);
+  padding: 12px 14px;
+  text-align: left;
+}
+
+.fila-venta:active { background: var(--color-bg-alt); }
+
+.fila-venta-folio { display: block; font-weight: 600; font-family: var(--fuente-mono); }
+.fila-venta-fecha { display: block; font-size: 0.78rem; color: var(--color-text-muted); margin-top: 2px; }
+.fila-venta-total { font-family: var(--fuente-mono); font-weight: 700; color: var(--color-primary-dark); }
+
+.detalle-venta-fecha { color: var(--color-text-muted); font-size: 0.85rem; margin-bottom: 12px; }
+
+.detalle-venta-items { border-top: 1px dashed var(--color-border); }
+
+.detalle-venta-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px dashed var(--color-border);
+  font-size: 0.92rem;
+}
+
+.detalle-venta-total-fila {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 12px;
+  margin-top: 4px;
+  font-family: var(--fuente-mono);
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+/* =========================================================================
+   PANTALLA: RESUMEN
+   ========================================================================= */
+
+.grafico-barras {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  height: 160px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radio-medio);
+  padding: 16px 10px 10px;
+}
+
+.grafico-barra-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+  gap: 4px;
+}
+
+.grafico-barra-valor {
+  font-size: 0.6rem;
+  font-family: var(--fuente-mono);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.grafico-barra {
+  width: 60%;
+  min-height: 4px;
+  background: var(--color-primary);
+  border-radius: 3px 3px 0 0;
+}
+
+.grafico-barra-etiqueta {
+  font-size: 0.68rem;
+  color: var(--color-text-muted);
+  text-transform: capitalize;
+}
+
+.lista-ranking {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radio-medio);
+  overflow: hidden;
+}
+
+.fila-ranking {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px dashed var(--color-border);
+}
+
+.fila-ranking:last-child { border-bottom: none; }
+
+.fila-ranking-puesto {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  font-family: var(--fuente-mono);
+  font-weight: 700;
+  font-size: 0.8rem;
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+}
+
+.fila-ranking-puesto-1 { background: var(--color-accent); border-color: var(--color-accent); color: #392900; }
+.fila-ranking-puesto-2 { background: #E4E7DC; border-color: var(--color-border); color: var(--color-text); }
+.fila-ranking-puesto-3 { background: #EDE0C8; border-color: #D8C79A; color: #6B4B12; }
+
+.fila-ranking-detalle { flex: 1; min-width: 0; }
+
+.fila-ranking-cabecera {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+
+.fila-ranking-nombre { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fila-ranking-unidades { font-size: 0.78rem; color: var(--color-text-muted); white-space: nowrap; }
+
+.fila-ranking-barra-fondo {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--color-bg);
+  overflow: hidden;
+}
+
+.fila-ranking-barra-relleno {
+  height: 100%;
+  background: var(--color-primary);
+  border-radius: 3px;
+}
+
+/* =========================================================================
+   MODALES
+   ========================================================================= */
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  visibility: hidden;
+  pointer-events: none;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.modal.modal-abierto { visibility: visible; pointer-events: auto; }
+
+.modal-fondo {
+  position: absolute;
+  inset: 0;
+  background: rgba(31, 42, 34, 0.45);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.modal.modal-abierto .modal-fondo { opacity: 1; }
+
+.modal-caja {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  max-height: 88vh;
+  overflow-y: auto;
+  background: var(--color-surface);
+  border-radius: 16px 16px 0 0;
+  padding: 18px 18px calc(18px + env(safe-area-inset-bottom));
+  transform: translateY(16px);
+  opacity: 0;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.modal.modal-abierto .modal-caja { transform: translateY(0); opacity: 1; }
+
+.modal-caja-angosta { max-width: 380px; }
+
+.modal-encabezado {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.modal-cerrar {
+  font-size: 1.4rem;
+  line-height: 1;
+  color: var(--color-text-muted);
+  padding: 4px 8px;
+}
+
+.modal-nota {
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+  margin-bottom: 14px;
+}
+
+.modal-cuerpo {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.modal-cuerpo-centrado { align-items: center; text-align: center; }
+
+.campo { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+
+.campo span { font-size: 0.82rem; font-weight: 600; color: var(--color-text-muted); }
+
+.campo input, .campo select {
+  padding: 11px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radio-chico);
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.campo input:focus, .campo select:focus { outline: none; border-color: var(--color-primary); background: var(--color-surface); }
+
+.campo-ayuda { font-size: 0.72rem; color: var(--color-text-muted); font-weight: 400; }
+
+.campo-fila { display: flex; gap: 10px; }
+
+.modal-botones { display: flex; gap: 10px; margin-top: 4px; }
+
+.resumen-confirmacion {
+  background: var(--color-bg);
+  border-radius: var(--radio-medio);
+  padding: 14px;
+}
+
+.resumen-confirmacion-fila {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 0.95rem;
+}
+
+.resumen-confirmacion-total {
+  font-family: var(--fuente-mono);
+  font-weight: 700;
+  font-size: 1.2rem;
+  border-top: 1px dashed var(--color-border);
+  margin-top: 6px;
+  padding-top: 10px;
+}
+
+.icono-exito {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: var(--color-primary-bg);
+  color: var(--color-primary);
+  font-size: 1.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+
+.exito-folio { font-family: var(--fuente-mono); color: var(--color-text-muted); margin-top: 4px; }
+.exito-total { font-family: var(--fuente-mono); font-size: 1.8rem; font-weight: 700; color: var(--color-primary-dark); margin: 4px 0 10px; }
+
+.agregar-stock-nombre { font-weight: 600; }
+.agregar-stock-actual { font-size: 0.85rem; color: var(--color-text-muted); }
+
+body.body-modal-abierto { overflow: hidden; }
+
+/* =========================================================================
+   TOASTS
+   ========================================================================= */
+
+.toast-container {
+  position: fixed;
+  top: calc(var(--alto-topbar) + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: calc(100% - 32px);
+  max-width: 380px;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--color-text);
+  color: white;
+  padding: 12px 14px;
+  border-radius: var(--radio-medio);
+  font-size: 0.88rem;
+  opacity: 0;
+  transform: translateY(-8px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  box-shadow: var(--sombra-media);
+}
+
+.toast-visible { opacity: 1; transform: translateY(0); }
+
+.toast-exito { background: var(--color-primary-dark); }
+.toast-error { background: var(--color-danger); }
+.toast-aviso { background: var(--color-warn); color: #392900; }
+.toast-icono { font-weight: 700; }
+.toast-texto { flex: 1; }
+
+
+/* =========================================================================
+   TABLET (>= 700px): más columnas en las cuadrículas
+   ========================================================================= */
+@media (min-width: 700px) {
+  .grid-stats { grid-template-columns: repeat(4, 1fr); }
+  .grid-productos { grid-template-columns: repeat(3, 1fr); }
+
+  .contenido-app { padding-left: 24px; padding-right: 24px; }
+}
+
+/* =========================================================================
+   ESCRITORIO (>= 980px): sidebar fijo, sin nav inferior, layout dividido
+   ========================================================================= */
+@media (min-width: 980px) {
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    width: 232px;
+    flex-shrink: 0;
+    background: var(--color-surface);
+    border-right: 1px solid var(--color-border);
+    height: 100vh;
+    position: sticky;
+    top: 0;
+    padding: 20px 14px;
+  }
+
+  .sidebar-marca {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--fuente-display);
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--color-primary-dark);
+    padding: 8px 10px 22px;
+  }
+
+  .sidebar-marca-icono { color: var(--color-accent-dark); font-size: 1.4rem; }
+
+  .sidebar-nav { display: flex; flex-direction: column; gap: 4px; }
+
+  .sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 12px;
+    border-radius: var(--radio-chico);
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--color-text-muted);
+    text-align: left;
+    border-left: 3px solid transparent;
+  }
+
+  .sidebar-item:hover { background: var(--color-bg-alt); }
+
+  .sidebar-item.nav-activo {
+    color: var(--color-primary-dark);
+    font-weight: 700;
+    border-left-color: var(--color-primary);
+    background: var(--color-primary-bg);
+  }
+
+  .topbar-movil, .bottom-nav, .hoja-inferior { display: none; }
+
+  .contenido-app {
+    padding: 32px 36px 48px;
+    max-width: 1200px;
+  }
+
+  .grid-stats { grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .tarjeta-stat { padding: 18px; }
+  .stat-valor { font-size: 1.75rem; }
+
+  .grid-productos { grid-template-columns: repeat(3, 1fr); }
+
+  /* ---- Nueva venta: productos + carrito lado a lado -------------------- */
+  .venta-layout {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 24px;
+  }
+
+  .venta-panel-productos { flex: 1; min-width: 0; }
+
+  .venta-carrito {
+    position: sticky;
+    top: 24px;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    width: 360px;
+    flex-shrink: 0;
+    transform: none;
+    border-radius: 12px;
+    border: 1px solid var(--color-border);
+    max-height: calc(100vh - 48px);
+  }
+
+  .carrito-peek { display: none; }
+  .carrito-cuerpo { padding: 16px; }
+
+  /* ---- Inventario: filas mas anchas, columnas alineadas ----------------- */
+  .fila-inventario-principal,
+  .fila-inventario {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr auto auto;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .fila-inventario { padding: 14px 18px; }
+
+  .fila-inventario-principal > div:first-child { grid-column: 1; }
+  .fila-inventario-precio { grid-column: 2; text-align: right; }
+  .fila-inventario-secundaria { display: contents; }
+  .fila-inventario-secundaria .etiqueta { grid-column: 3; justify-self: start; }
+  .fila-inventario-stock { grid-column: 4; }
+  .fila-inventario-acciones { grid-column: 5 / span 2; margin-top: 0; }
+
+  /* ---- Resumen: grafico mas alto ---------------------------------------- */
+  .grafico-barras { height: 220px; }
+}
+
+</style>
+</head>
+<body>
+
+<div class="app-shell">
+
+  <aside class="sidebar">
+    <div class="sidebar-marca">
+      <span class="sidebar-marca-icono">▣</span>
+      <span>Distribuidora</span>
+    </div>
+    <nav class="sidebar-nav">
+      <button class="sidebar-item nav-activo" data-pantalla="venta"><span class="nav-icon">🧮</span> Nueva venta</button>
+      <button class="sidebar-item" data-pantalla="inicio"><span class="nav-icon">🏠</span> Inicio</button>
+      <button class="sidebar-item" data-pantalla="inventario"><span class="nav-icon">📦</span> Inventario</button>
+      <button class="sidebar-item" data-pantalla="ventas"><span class="nav-icon">🧾</span> Ventas</button>
+      <button class="sidebar-item" data-pantalla="resumen"><span class="nav-icon">📊</span> Resumen</button>
+    </nav>
+  </aside>
+
+  <div class="app-main">
+    <header class="topbar-movil">
+      <span class="topbar-marca">Distribuidora</span>
+    </header>
+
+    <main class="contenido-app">
+      <section id="pantalla-inicio" class="pantalla"></section>
+      <section id="pantalla-venta" class="pantalla pantalla-activa"></section>
+      <section id="pantalla-inventario" class="pantalla"></section>
+      <section id="pantalla-ventas" class="pantalla"></section>
+      <section id="pantalla-resumen" class="pantalla"></section>
+    </main>
+
+    <nav class="bottom-nav">
+      <button class="nav-item nav-activo" data-pantalla="venta">
+        <span class="nav-icon">🧮</span><span class="nav-label">Venta</span>
+      </button>
+      <button class="nav-item" data-pantalla="inicio">
+        <span class="nav-icon">🏠</span><span class="nav-label">Inicio</span>
+      </button>
+      <button class="nav-item" data-pantalla="inventario">
+        <span class="nav-icon">📦</span><span class="nav-label">Inventario</span>
+      </button>
+      <button class="nav-item" data-pantalla="ventas">
+        <span class="nav-icon">🧾</span><span class="nav-label">Ventas</span>
+      </button>
+      <button class="nav-item" id="boton-nav-mas">
+        <span class="nav-icon">⋯</span><span class="nav-label">Más</span>
+      </button>
+    </nav>
+  </div>
+</div>
+
+<!-- Hoja "Más" (mobile): accesos adicionales -->
+<div class="hoja-inferior" id="hoja-mas">
+  <div class="hoja-fondo" id="hoja-mas-fondo"></div>
+  <div class="hoja-caja">
+    <button class="hoja-item" data-pantalla="resumen">
+      <span class="nav-icon">📊</span> Resumen
+    </button>
+  </div>
+</div>
+
+<!-- ==================== MODALES ==================== -->
+
+<!-- Producto rápido -->
+<div class="modal" id="modal-producto-rapido">
+  <div class="modal-fondo"></div>
+  <div class="modal-caja">
+    <div class="modal-encabezado">
+      <h3>Agregar producto rápido</h3>
+      <button class="modal-cerrar" onclick="UI.cerrarModal('modal-producto-rapido')">×</button>
+    </div>
+    <p class="modal-nota">No necesita estar registrado en el inventario para venderlo.</p>
+    <form id="form-producto-rapido" class="modal-cuerpo">
+      <label class="campo">
+        <span>Nombre del producto</span>
+        <input type="text" id="rapido-nombre" placeholder="Ej. Filtro de aceite" required>
+      </label>
+      <div class="campo-fila">
+        <label class="campo">
+          <span>Precio (C$)</span>
+          <input type="number" id="rapido-precio" min="0.01" step="0.01" placeholder="0.00" required>
+        </label>
+        <label class="campo">
+          <span>Cantidad</span>
+          <input type="number" id="rapido-cantidad" min="1" step="1" value="1" required>
+        </label>
+      </div>
+      <button type="submit" class="btn-primario btn-ancho-completo">Agregar a la venta</button>
+    </form>
+  </div>
+</div>
+
+<!-- Guardar producto rápido en inventario -->
+<div class="modal" id="modal-guardar-inventario">
+  <div class="modal-fondo"></div>
+  <div class="modal-caja">
+    <div class="modal-encabezado">
+      <h3>Guardar en inventario</h3>
+      <button class="modal-cerrar" onclick="UI.cerrarModal('modal-guardar-inventario')">×</button>
+    </div>
+    <form id="form-guardar-inventario" class="modal-cuerpo">
+      <label class="campo">
+        <span>Nombre del producto</span>
+        <input type="text" id="guardar-inv-nombre" readonly>
+      </label>
+      <div class="campo-fila">
+        <label class="campo">
+          <span>Precio (C$)</span>
+          <input type="number" id="guardar-inv-precio" min="0.01" step="0.01" required>
+        </label>
+        <label class="campo">
+          <span>Categoría</span>
+          <select id="guardar-inv-categoria" required></select>
+        </label>
+      </div>
+      <label class="campo">
+        <span>Stock inicial</span>
+        <input type="number" id="guardar-inv-stock" min="0" step="1" value="0" required>
+        <small class="campo-ayuda">No incluye la cantidad que estás vendiendo ahora mismo.</small>
+      </label>
+      <button type="submit" class="btn-primario btn-ancho-completo">Guardar en inventario</button>
+    </form>
+  </div>
+</div>
+
+<!-- Confirmar venta -->
+<div class="modal" id="modal-confirmar-venta">
+  <div class="modal-fondo"></div>
+  <div class="modal-caja modal-caja-angosta">
+    <div class="modal-encabezado">
+      <h3>¿Confirmar esta venta?</h3>
+      <button class="modal-cerrar" onclick="UI.cerrarModal('modal-confirmar-venta')">×</button>
+    </div>
+    <div class="modal-cuerpo">
+      <div class="resumen-confirmacion">
+        <div class="resumen-confirmacion-fila">
+          <span>Productos</span>
+          <span id="confirmar-venta-cantidad">0</span>
+        </div>
+        <div class="resumen-confirmacion-fila resumen-confirmacion-total">
+          <span>Total</span>
+          <span id="confirmar-venta-total">C$0.00</span>
+        </div>
+      </div>
+      <div class="modal-botones">
+        <button class="btn-secundario btn-ancho-completo" id="btn-cancelar-confirmar-venta">Cancelar</button>
+        <button class="btn-primario btn-ancho-completo" id="btn-aceptar-confirmar-venta">Confirmar venta</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Éxito de venta -->
+<div class="modal" id="modal-exito-venta">
+  <div class="modal-fondo"></div>
+  <div class="modal-caja modal-caja-angosta modal-exito">
+    <div class="modal-cuerpo modal-cuerpo-centrado">
+      <div class="icono-exito">✓</div>
+      <h3>Venta registrada</h3>
+      <p class="exito-folio" id="exito-venta-folio">Venta #0000</p>
+      <p class="exito-total" id="exito-venta-total">C$0.00</p>
+      <div class="modal-botones">
+        <button class="btn-secundario btn-ancho-completo" id="btn-exito-ver-venta">Ver venta</button>
+        <button class="btn-primario btn-ancho-completo" id="btn-exito-nueva-venta">Nueva venta</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Nuevo / Editar producto -->
+<div class="modal" id="modal-producto">
+  <div class="modal-fondo"></div>
+  <div class="modal-caja">
+    <div class="modal-encabezado">
+      <h3 id="titulo-modal-producto">Nuevo producto</h3>
+      <button class="modal-cerrar" onclick="UI.cerrarModal('modal-producto')">×</button>
+    </div>
+    <form id="form-producto" class="modal-cuerpo">
+      <label class="campo">
+        <span>Nombre</span>
+        <input type="text" id="producto-nombre" placeholder="Ej. Pastilla de freno" required>
+      </label>
+      <label class="campo">
+        <span>Categoría</span>
+        <select id="producto-categoria" required></select>
+      </label>
+      <div class="campo-fila">
+        <label class="campo">
+          <span>Precio (C$)</span>
+          <input type="number" id="producto-precio" min="0.01" step="0.01" placeholder="0.00" required>
+        </label>
+        <label class="campo">
+          <span>Stock inicial</span>
+          <input type="number" id="producto-stock" min="0" step="1" placeholder="0" required>
+        </label>
+      </div>
+      <button type="submit" class="btn-primario btn-ancho-completo">Guardar producto</button>
+    </form>
+  </div>
+</div>
+
+<!-- Agregar stock -->
+<div class="modal" id="modal-agregar-stock">
+  <div class="modal-fondo"></div>
+  <div class="modal-caja modal-caja-angosta">
+    <div class="modal-encabezado">
+      <h3>Agregar existencias</h3>
+      <button class="modal-cerrar" onclick="UI.cerrarModal('modal-agregar-stock')">×</button>
+    </div>
+    <form id="form-agregar-stock" class="modal-cuerpo">
+      <p class="agregar-stock-nombre" id="agregar-stock-nombre"></p>
+      <p class="agregar-stock-actual" id="agregar-stock-actual"></p>
+      <label class="campo">
+        <span>Cantidad a agregar</span>
+        <input type="number" id="agregar-stock-cantidad" min="1" step="1" placeholder="0" required>
+      </label>
+      <button type="submit" class="btn-primario btn-ancho-completo">Agregar</button>
+    </form>
+  </div>
+</div>
+
+<!-- Detalle de venta -->
+<div class="modal" id="modal-detalle-venta">
+  <div class="modal-fondo"></div>
+  <div class="modal-caja">
+    <div class="modal-encabezado">
+      <h3 id="detalle-venta-folio">Venta #0000</h3>
+      <button class="modal-cerrar" onclick="UI.cerrarModal('modal-detalle-venta')">×</button>
+    </div>
+    <div class="modal-cuerpo">
+      <p class="detalle-venta-fecha" id="detalle-venta-fecha"></p>
+      <div class="detalle-venta-items" id="detalle-venta-items"></div>
+      <div class="detalle-venta-total-fila">
+        <span>TOTAL</span>
+        <span id="detalle-venta-total">C$0.00</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<script>
+/**
+ * storage.js
+ * -----------------------------------------------------------------------
+ * Capa de datos de la aplicacion. TODA la lectura/escritura de datos pasa
+ * por las funciones de este archivo (objeto `Storage`).
+ *
+ * Por ahora los datos viven en localStorage. El dia que se conecte la API
+ * real (Node + Express + MySQL), solo hay que reescribir el CUERPO de estas
+ * funciones para que hagan fetch() en lugar de leer/escribir localStorage.
+ * Ningun otro archivo (ventas.js, inventario.js, dashboard.js, resumen.js)
+ * deberia tocar `localStorage` directamente: todos hablan con `Storage`.
+ * -----------------------------------------------------------------------
+ */
+
+const Storage = (function () {
+  const CLAVES = {
+    PRODUCTOS: 'distribuidora_productos',
+    VENTAS: 'distribuidora_ventas',
+    CONTADOR_FOLIO: 'distribuidora_contador_folio',
+    CARRITO: 'distribuidora_carrito',
+    CATEGORIAS: 'distribuidora_categorias',
+    SEMILLA: 'distribuidora_semilla_v1',
+  };
+
+  const UMBRAL_POCO_STOCK = 10;
+
+  const CATEGORIAS_BASE = ['Granos básicos', 'Bebidas', 'Lácteos', 'Snacks', 'Limpieza', 'Otros'];
+
+  // ---- utilidades internas -----------------------------------------
+
+  function leer(clave, porDefecto) {
+    try {
+      const crudo = localStorage.getItem(clave);
+      return crudo ? JSON.parse(crudo) : porDefecto;
+    } catch (err) {
+      console.error(`No se pudo leer "${clave}" de localStorage:`, err);
+      return porDefecto;
+    }
+  }
+
+  function escribir(clave, valor) {
+    try {
+      localStorage.setItem(clave, JSON.stringify(valor));
+    } catch (err) {
+      console.error(`No se pudo guardar "${clave}" en localStorage:`, err);
+    }
+  }
+
+  function generarId(prefijo) {
+    return `${prefijo}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  // Redondea a centavos evitando arrastre de errores de punto flotante.
+  function redondear(valor) {
+    return Math.round((valor + Number.EPSILON) * 100) / 100;
+  }
+
+  function calcularEstado(stock) {
+    if (stock <= 0) return 'agotado';
+    if (stock <= UMBRAL_POCO_STOCK) return 'poco_stock';
+    return 'disponible';
+  }
+
+  // ---- semilla de datos de demostracion ------------------------------
+
+  function fechaHace({ dias = 0, horas = 0, minutos = 0 }) {
+    const f = new Date();
+    f.setDate(f.getDate() - dias);
+    f.setHours(f.getHours() - horas, f.getMinutes() - minutos, 0, 0);
+    return f.toISOString();
+  }
+
+  function sembrarSiNecesario() {
+    if (leer(CLAVES.SEMILLA, false)) return;
+
+    const productosBase = [
+      { nombre: 'Filtro de aceite', categoria: 'Motor', precio: 220, stock: 42 },
+      { nombre: 'Pastilla de freno', categoria: 'Frenos', precio: 180, stock: 16 },
+      { nombre: 'Bujía', categoria: 'Motor', precio: 95, stock: 60 },
+      { nombre: 'Cadena de moto', categoria: 'Motor', precio: 420, stock: 9 },
+      { nombre: 'Neumático 17"', categoria: 'Ruedas y neumáticos', precio: 680, stock: 8 },
+      { nombre: 'Kit de embrague', categoria: 'Motor', precio: 540, stock: 10 },
+      { nombre: 'Amortiguador delantero', categoria: 'Suspensión', precio: 430, stock: 7 },
+      { nombre: 'Manillar', categoria: 'Accesorios', precio: 220, stock: 18 },
+      { nombre: 'Faro LED', categoria: 'Eléctrica', precio: 310, stock: 14 },
+      { nombre: 'Aceite 10W40', categoria: 'Motor', precio: 180, stock: 30 },
+      { nombre: 'Disco de freno', categoria: 'Frenos', precio: 260, stock: 21 },
+      { nombre: 'Cable de acelerador', categoria: 'Accesorios', precio: 120, stock: 38 },
+      { nombre: 'Lámpara de señal', categoria: 'Eléctrica', precio: 90, stock: 52 },
+      { nombre: 'Kit de limpieza', categoria: 'Accesorios', precio: 70, stock: 24 },
+    ];
+
+    const productos = productosBase.map((p) => ({
+      id: generarId('prod'),
+      nombre: p.nombre,
+      categoria: p.categoria,
+      precio: p.precio,
+      stock: p.stock,
+      estado: calcularEstado(p.stock),
+      activo: true,
+      createdAt: fechaHace({ dias: 30 }),
+      updatedAt: fechaHace({ dias: 30 }),
+    }));
+
+    const buscar = (nombre) => productos.find((p) => p.nombre === nombre);
+
+    function crearVenta(folio, fechaISO, combinacion) {
+      const items = combinacion.map(([nombre, cantidad]) => {
+        const p = buscar(nombre);
+        const subtotal = redondear(p.precio * cantidad);
+        return {
+          productoId: p.id,
+          nombre: p.nombre,
+          cantidad,
+          precioUnitario: p.precio,
+          subtotal,
+          esRapido: false,
+        };
+      });
+      const total = redondear(items.reduce((s, it) => s + it.subtotal, 0));
+      return { id: folio, fecha: fechaISO, items, total };
+    }
+
+    const ventas = [
+      // --- dias anteriores (para el grafico de 7 dias y "mas vendidos") ---
+      crearVenta(1020, fechaHace({ dias: 6, horas: 3 }), [['Filtro de aceite', 6], ['Disco de freno', 2]]),
+      crearVenta(1021, fechaHace({ dias: 6, horas: 1 }), [['Pastilla de freno', 4], ['Kit de limpieza', 5]]),
+      crearVenta(1022, fechaHace({ dias: 6, horas: 0.5 }), [['Cable de acelerador', 8], ['Lámpara de señal', 3]]),
+
+      crearVenta(1023, fechaHace({ dias: 5, horas: 4 }), [['Filtro de aceite', 10], ['Aceite 10W40', 3]]),
+      crearVenta(1024, fechaHace({ dias: 5, horas: 2 }), [['Faro LED', 6], ['Kit de limpieza', 4]]),
+
+      crearVenta(1025, fechaHace({ dias: 4, horas: 5 }), [['Filtro de aceite', 8], ['Disco de freno', 3], ['Pastilla de freno', 2]]),
+      crearVenta(1026, fechaHace({ dias: 4, horas: 3 }), [['Manillar', 4], ['Cadena de moto', 5]]),
+      crearVenta(1027, fechaHace({ dias: 4, horas: 1 }), [['Bujía', 3], ['Kit de embrague', 1]]),
+
+      crearVenta(1028, fechaHace({ dias: 3, horas: 6 }), [['Filtro de aceite', 12], ['Disco de freno', 4]]),
+      crearVenta(1029, fechaHace({ dias: 3, horas: 4 }), [['Pastilla de freno', 6], ['Aceite 10W40', 4]]),
+      crearVenta(1030, fechaHace({ dias: 3, horas: 2 }), [['Cable de acelerador', 10], ['Faro LED', 5]]),
+
+      crearVenta(1031, fechaHace({ dias: 2, horas: 5 }), [['Cadena de moto', 3], ['Disco de freno', 5]]),
+      crearVenta(1032, fechaHace({ dias: 2, horas: 3 }), [['Kit de limpieza', 8], ['Bujía', 2]]),
+      crearVenta(1033, fechaHace({ dias: 2, horas: 1 }), [['Filtro de aceite', 9], ['Pastilla de freno', 3]]),
+
+      crearVenta(1034, fechaHace({ dias: 1, horas: 6 }), [['Filtro de aceite', 14], ['Disco de freno', 6]]),
+      crearVenta(1035, fechaHace({ dias: 1, horas: 4 }), [['Manillar', 5], ['Kit de limpieza', 6]]),
+      crearVenta(1036, fechaHace({ dias: 1, horas: 2 }), [['Lámpara de señal', 4], ['Cadena de moto', 3], ['Bujía', 2]]),
+      crearVenta(1037, fechaHace({ dias: 1, horas: 1 }), [['Pastilla de freno', 5], ['Aceite 10W40', 2]]),
+
+      // --- hoy ---
+      crearVenta(1040, fechaHace({ minutos: 25 }), [['Cadena de moto', 10], ['Bujía', 5]]),
+      crearVenta(1041, fechaHace({ minutos: 12 }), [['Faro LED', 4], ['Kit de limpieza', 12]]),
+      crearVenta(1042, fechaHace({ minutos: 5 }), [['Manillar', 9], ['Cable de acelerador', 9]]),
+    ];
+
+    escribir(CLAVES.PRODUCTOS, productos);
+    escribir(CLAVES.VENTAS, ventas);
+    escribir(CLAVES.CONTADOR_FOLIO, 1043);
+    escribir(CLAVES.CARRITO, []);
+    escribir(CLAVES.CATEGORIAS, CATEGORIAS_BASE.slice());
+    escribir(CLAVES.SEMILLA, true);
+  }
+
+  // ---- API publica: CATEGORIAS ----------------------------------------
+
+  function getCategorias() {
+    return leer(CLAVES.CATEGORIAS, CATEGORIAS_BASE.slice());
+  }
+
+  function agregarCategoria(nombre) {
+    const limpio = (nombre || '').trim();
+    if (!limpio) throw new Error('El nombre de la categoría no puede estar vacío.');
+
+    const categorias = getCategorias();
+    const yaExiste = categorias.some((c) => c.toLowerCase() === limpio.toLowerCase());
+    if (yaExiste) throw new Error(`La categoría "${limpio}" ya existe.`);
+
+    categorias.push(limpio);
+    escribir(CLAVES.CATEGORIAS, categorias);
+    return categorias;
+  }
+
+  // ---- API publica: PRODUCTOS ----------------------------------------
+
+  function getProductos() {
+    return leer(CLAVES.PRODUCTOS, []);
+  }
+
+  function getProducto(id) {
+    return getProductos().find((p) => p.id === id) || null;
+  }
+
+  function crearProducto({ nombre, categoria, precio, stock }) {
+    const productos = getProductos();
+    const nuevo = {
+      id: generarId('prod'),
+      nombre: nombre.trim(),
+      categoria,
+      precio: redondear(Number(precio)),
+      stock: Math.max(0, Math.trunc(Number(stock) || 0)),
+      estado: calcularEstado(Math.max(0, Math.trunc(Number(stock) || 0))),
+      activo: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    productos.push(nuevo);
+    escribir(CLAVES.PRODUCTOS, productos);
+    return nuevo;
+  }
+
+  function actualizarProducto(id, cambios) {
+    const productos = getProductos();
+    const idx = productos.findIndex((p) => p.id === id);
+    if (idx === -1) throw new Error('Producto no encontrado.');
+
+    const actualizado = { ...productos[idx], ...cambios, updatedAt: new Date().toISOString() };
+    if (typeof cambios.precio === 'number') actualizado.precio = redondear(cambios.precio);
+    if (typeof cambios.stock === 'number') {
+      actualizado.stock = Math.max(0, Math.trunc(cambios.stock));
+      actualizado.estado = calcularEstado(actualizado.stock);
+    }
+    productos[idx] = actualizado;
+    escribir(CLAVES.PRODUCTOS, productos);
+    return actualizado;
+  }
+
+  function agregarStock(id, cantidad) {
+    const producto = getProducto(id);
+    if (!producto) throw new Error('Producto no encontrado.');
+    const cantidadNumerica = Math.trunc(Number(cantidad));
+    if (!Number.isFinite(cantidadNumerica) || cantidadNumerica <= 0) {
+      throw new Error('La cantidad a agregar debe ser un numero positivo.');
+    }
+    return actualizarProducto(id, { stock: producto.stock + cantidadNumerica });
+  }
+
+  function eliminarProducto(id) {
+    const productos = getProductos();
+    const existe = productos.some((p) => p.id === id);
+    if (!existe) throw new Error('Producto no encontrado.');
+    escribir(CLAVES.PRODUCTOS, productos.filter((p) => p.id !== id));
+
+    // Si el producto eliminado estaba en el carrito en curso, lo quitamos
+    // (el historial de ventas ya pasadas no se ve afectado: guarda su propia copia de nombre/precio).
+    const carrito = getCarrito().filter((item) => item.productoId !== id);
+    escribir(CLAVES.CARRITO, carrito);
+  }
+
+  // ---- API publica: CARRITO (venta en curso) --------------------------
+
+  function getCarrito() {
+    return leer(CLAVES.CARRITO, []);
+  }
+
+  function guardarCarrito(items) {
+    escribir(CLAVES.CARRITO, items);
+  }
+
+  function vaciarCarrito() {
+    escribir(CLAVES.CARRITO, []);
+  }
+
+  // ---- API publica: VENTAS --------------------------------------------
+
+  function getVentas() {
+    return leer(CLAVES.VENTAS, []).slice().sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+  }
+
+  function getVenta(id) {
+    return leer(CLAVES.VENTAS, []).find((v) => String(v.id) === String(id)) || null;
+  }
+
+  function siguienteFolio() {
+    return leer(CLAVES.CONTADOR_FOLIO, 1000);
+  }
+
+  /**
+   * Registra una venta a partir de los items del carrito.
+   * Valida stock, descuenta inventario de productos registrados
+   * (los "productos rapidos" con productoId === null NO descuentan stock)
+   * y limpia el carrito. Lanza un Error con mensaje claro si algo falla,
+   * para que la UI lo muestre igual que lo haria un error de servidor.
+   */
+  function registrarVenta(itemsCarrito) {
+    if (!itemsCarrito || itemsCarrito.length === 0) {
+      throw new Error('El carrito esta vacio.');
+    }
+
+    const productos = getProductos();
+
+    // 1) Validar stock de todos los productos registrados ANTES de aplicar cambios
+    for (const item of itemsCarrito) {
+      if (item.esRapido) continue;
+      const producto = productos.find((p) => p.id === item.productoId);
+      if (!producto) {
+        throw new Error(`El producto "${item.nombre}" ya no existe en el inventario.`);
+      }
+      if (producto.stock < item.cantidad) {
+        throw new Error(`No hay suficiente inventario disponible de "${producto.nombre}".`);
+      }
+    }
+
+    // 2) Descontar stock (todo o nada, simulando una transaccion)
+    const productosActualizados = productos.map((p) => ({ ...p }));
+    for (const item of itemsCarrito) {
+      if (item.esRapido) continue;
+      const producto = productosActualizados.find((p) => p.id === item.productoId);
+      producto.stock -= item.cantidad;
+      producto.estado = calcularEstado(producto.stock);
+      producto.updatedAt = new Date().toISOString();
+    }
+    escribir(CLAVES.PRODUCTOS, productosActualizados);
+
+    // 3) Crear el registro de venta
+    const folio = siguienteFolio();
+    const total = redondear(itemsCarrito.reduce((s, it) => s + it.subtotal, 0));
+    const venta = {
+      id: folio,
+      fecha: new Date().toISOString(),
+      items: itemsCarrito.map((it) => ({
+        productoId: it.esRapido ? null : it.productoId,
+        nombre: it.nombre,
+        cantidad: it.cantidad,
+        precioUnitario: it.precioUnitario,
+        subtotal: it.subtotal,
+        esRapido: !!it.esRapido,
+      })),
+      total,
+    };
+
+    const ventas = leer(CLAVES.VENTAS, []);
+    ventas.push(venta);
+    escribir(CLAVES.VENTAS, ventas);
+    escribir(CLAVES.CONTADOR_FOLIO, folio + 1);
+    vaciarCarrito();
+
+    return venta;
+  }
+
+  // ---- API publica: ESTADISTICAS --------------------------------------
+
+  function getVentasEntre(fechaInicio, fechaFin) {
+    return getVentas().filter((v) => {
+      const f = new Date(v.fecha);
+      return f >= fechaInicio && f <= fechaFin;
+    });
+  }
+
+  function getVentasDeHoy() {
+    const inicio = new Date();
+    inicio.setHours(0, 0, 0, 0);
+    const fin = new Date();
+    fin.setHours(23, 59, 59, 999);
+    return getVentasEntre(inicio, fin);
+  }
+
+  return {
+    UMBRAL_POCO_STOCK,
+    sembrarSiNecesario,
+    redondear,
+    calcularEstado,
+    // categorias
+    getCategorias,
+    agregarCategoria,
+    // productos
+    getProductos,
+    getProducto,
+    crearProducto,
+    actualizarProducto,
+    agregarStock,
+    eliminarProducto,
+    // carrito
+    getCarrito,
+    guardarCarrito,
+    vaciarCarrito,
+    // ventas
+    getVentas,
+    getVenta,
+    siguienteFolio,
+    registrarVenta,
+    getVentasEntre,
+    getVentasDeHoy,
+  };
+})();
+
+
+/**
+ * ui.js
+ * -----------------------------------------------------------------------
+ * Utilidades de interfaz compartidas por toda la app:
+ * formato de moneda/fecha, toasts, apertura/cierre de modales,
+ * y el cambio entre pantallas (Inicio / Nueva venta / Inventario / Ventas / Resumen).
+ * -----------------------------------------------------------------------
+ */
+
+const UI = (function () {
+  // ---- formato ---------------------------------------------------------
+
+  function formatoMoneda(valor) {
+    const numero = Number(valor) || 0;
+    return `C$${numero.toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+
+  function formatoFechaRelativa(fechaISO) {
+    const fecha = new Date(fechaISO);
+    const ahora = new Date();
+    const diffMs = ahora - fecha;
+    const diffMin = Math.floor(diffMs / 60000);
+
+    if (diffMin < 1) return 'Justo ahora';
+    if (diffMin < 60) return `Hace ${diffMin} minuto${diffMin === 1 ? '' : 's'}`;
+    const diffHoras = Math.floor(diffMin / 60);
+    if (diffHoras < 24 && esMismoDia(fecha, ahora)) {
+      return `Hace ${diffHoras} hora${diffHoras === 1 ? '' : 's'}`;
+    }
+    return formatoFechaCorta(fechaISO);
+  }
+
+  function esMismoDia(a, b) {
+    return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  }
+
+  function formatoFechaCorta(fechaISO) {
+    const fecha = new Date(fechaISO);
+    const hoy = new Date();
+    const ayer = new Date();
+    ayer.setDate(hoy.getDate() - 1);
+
+    const hora = fecha.toLocaleTimeString('es-NI', { hour: 'numeric', minute: '2-digit', hour12: true });
+
+    if (esMismoDia(fecha, hoy)) return `Hoy — ${hora}`;
+    if (esMismoDia(fecha, ayer)) return `Ayer — ${hora}`;
+    const fechaCorta = fecha.toLocaleDateString('es-NI', { day: '2-digit', month: '2-digit' });
+    return `${fechaCorta} — ${hora}`;
+  }
+
+  // ---- toasts ------------------------------------------------------------
+
+  let contenedorToasts = null;
+
+  function inicializarToasts() {
+    contenedorToasts = document.getElementById('toast-container');
+  }
+
+  function mostrarToast(mensaje, tipo = 'info') {
+    if (!contenedorToasts) inicializarToasts();
+    if (!contenedorToasts) return;
+
+    const iconos = { exito: '✓', error: '✕', aviso: '⚠' , info: 'ℹ' };
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${tipo}`;
+    toast.innerHTML = `<span class="toast-icono">${iconos[tipo] || iconos.info}</span><span class="toast-texto"></span>`;
+    toast.querySelector('.toast-texto').textContent = mensaje;
+
+    contenedorToasts.appendChild(toast);
+    requestAnimationFrame(() => toast.classList.add('toast-visible'));
+
+    setTimeout(() => {
+      toast.classList.remove('toast-visible');
+      setTimeout(() => toast.remove(), 250);
+    }, 3000);
+  }
+
+  // ---- modales -----------------------------------------------------------
+
+  function abrirModal(idModal) {
+    const modal = document.getElementById(idModal);
+    if (!modal) return;
+    modal.classList.add('modal-abierto');
+    document.body.classList.add('body-modal-abierto');
+    const primerCampo = modal.querySelector('input, select, textarea, button.btn-primario');
+    if (primerCampo) setTimeout(() => primerCampo.focus(), 50);
+  }
+
+  function cerrarModal(idModal) {
+    const modal = document.getElementById(idModal);
+    if (!modal) return;
+    modal.classList.remove('modal-abierto');
+    document.body.classList.remove('body-modal-abierto');
+  }
+
+  function cerrarTodosLosModales() {
+    document.querySelectorAll('.modal.modal-abierto').forEach((m) => m.classList.remove('modal-abierto'));
+    document.body.classList.remove('body-modal-abierto');
+  }
+
+  // ---- navegacion entre pantallas -----------------------------------------
+
+  const PANTALLAS = ['inicio', 'venta', 'inventario', 'ventas', 'resumen'];
+  let alCambiarPantalla = null;
+
+  function onCambioPantalla(callback) {
+    alCambiarPantalla = callback;
+  }
+
+  function irAPantalla(nombre) {
+    if (!PANTALLAS.includes(nombre)) return;
+
+    document.querySelectorAll('.pantalla').forEach((s) => s.classList.remove('pantalla-activa'));
+    const seccion = document.getElementById(`pantalla-${nombre}`);
+    if (seccion) seccion.classList.add('pantalla-activa');
+
+    document.querySelectorAll('[data-pantalla]').forEach((btn) => {
+      btn.classList.toggle('nav-activo', btn.dataset.pantalla === nombre);
+    });
+
+    cerrarTodosLosModales();
+    document.getElementById('hoja-mas')?.classList.remove('hoja-abierta');
+    window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
+
+    if (typeof alCambiarPantalla === 'function') alCambiarPantalla(nombre);
+  }
+
+  function inicializarNavegacion() {
+    // Delegacion de eventos: asi cualquier boton con data-pantalla funciona
+    // aunque se haya creado dinamicamente despues (ej. "Ver inventario" en Inicio,
+    // "Ver todas" en Actividad reciente, los accesos de la hoja "Mas", etc.)
+    document.addEventListener('click', (e) => {
+      const boton = e.target.closest('[data-pantalla]');
+      if (boton) irAPantalla(boton.dataset.pantalla);
+    });
+
+    const botonMas = document.getElementById('boton-nav-mas');
+    const hojaMas = document.getElementById('hoja-mas');
+    if (botonMas && hojaMas) {
+      botonMas.addEventListener('click', () => hojaMas.classList.toggle('hoja-abierta'));
+      document.getElementById('hoja-mas-fondo')?.addEventListener('click', () => hojaMas.classList.remove('hoja-abierta'));
+    }
+  }
+
+  // Cierra modales al hacer click en el fondo, y con la tecla Escape
+  function inicializarCierreGlobalModales() {
+    document.addEventListener('click', (e) => {
+      if (e.target.classList && e.target.classList.contains('modal-fondo')) {
+        cerrarTodosLosModales();
+      }
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') cerrarTodosLosModales();
+    });
+  }
+
+  // ---- selects de categoria (compartido por Inventario y Producto rapido) ----
+
+  function llenarSelectCategorias(selectEl, seleccionActual) {
+    const categorias = Storage.getCategorias();
+    selectEl.innerHTML =
+      `<option value="" disabled ${seleccionActual ? '' : 'selected'} hidden>Selecciona una categoría</option>` +
+      categorias.map((c) => `<option value="${c}" ${c === seleccionActual ? 'selected' : ''}>${c}</option>`).join('') +
+      '<option value="__nueva__">+ Agregar categoría...</option>';
+
+    // Usamos onchange (no addEventListener) para no ir acumulando manejadores
+    // cada vez que se vuelve a abrir el mismo modal.
+    selectEl.onchange = () => {
+      if (selectEl.value !== '__nueva__') return;
+      const nombre = prompt('Nombre de la nueva categoría:');
+      if (!nombre || !nombre.trim()) {
+        selectEl.value = seleccionActual || '';
+        return;
+      }
+      try {
+        Storage.agregarCategoria(nombre);
+        llenarSelectCategorias(selectEl, nombre.trim());
+        mostrarToast(`Categoría "${nombre.trim()}" agregada`, 'exito');
+      } catch (err) {
+        mostrarToast(err.message, 'error');
+        selectEl.value = seleccionActual || '';
+      }
+    };
+  }
+
+  return {
+    formatoMoneda,
+    formatoFechaRelativa,
+    formatoFechaCorta,
+    mostrarToast,
+    abrirModal,
+    cerrarModal,
+    cerrarTodosLosModales,
+    irAPantalla,
+    onCambioPantalla,
+    inicializarNavegacion,
+    inicializarCierreGlobalModales,
+    llenarSelectCategorias,
+  };
+})();
+
+
+/**
+ * dashboard.js
+ * Pantalla "Inicio": resumen del dia, actividad reciente, poco stock.
+ */
+
+const Dashboard = (function () {
+  function saludo() {
+    const hora = new Date().getHours();
+    if (hora < 12) return 'Buenos días';
+    if (hora < 19) return 'Buenas tardes';
+    return 'Buenas noches';
+  }
+
+  function renderizar() {
+    const cont = document.getElementById('pantalla-inicio');
+    if (!cont) return;
+
+    const ventasHoy = Storage.getVentasDeHoy();
+    const totalHoy = Storage.redondear(ventasHoy.reduce((s, v) => s + v.total, 0));
+    const unidadesHoy = ventasHoy.reduce(
+      (s, v) => s + v.items.reduce((si, it) => si + it.cantidad, 0),
+      0
+    );
+    const productos = Storage.getProductos();
+    const pocoStock = productos.filter((p) => p.estado === 'poco_stock');
+
+    const ultimasVentas = Storage.getVentas().slice(0, 5);
+
+    cont.innerHTML = `
+      <div class="encabezado-pantalla">
+        <p class="texto-saludo">${saludo()}</p>
+        <h2>Resumen del negocio</h2>
+      </div>
+
+      <div class="grid-stats">
+        <div class="tarjeta-stat">
+          <span class="stat-etiqueta">Ventas de hoy</span>
+          <span class="stat-valor stat-valor-dinero">${UI.formatoMoneda(totalHoy)}</span>
+        </div>
+        <div class="tarjeta-stat">
+          <span class="stat-etiqueta">Ventas</span>
+          <span class="stat-valor">${ventasHoy.length}</span>
+        </div>
+        <div class="tarjeta-stat">
+          <span class="stat-etiqueta">Productos vendidos</span>
+          <span class="stat-valor">${unidadesHoy}</span>
+        </div>
+        <div class="tarjeta-stat ${pocoStock.length > 0 ? 'tarjeta-stat-aviso' : ''}">
+          <span class="stat-etiqueta">Poco stock</span>
+          <span class="stat-valor">${pocoStock.length}</span>
+        </div>
+      </div>
+
+      <section class="seccion-bloque">
+        <div class="titulo-seccion-fila">
+          <h3>Actividad reciente</h3>
+          <button class="enlace-boton" data-pantalla="ventas">Ver todas</button>
+        </div>
+        <div class="lista-actividad">
+          ${
+            ultimasVentas.length === 0
+              ? '<p class="estado-vacio">Todavía no hay ventas registradas.</p>'
+              : ultimasVentas
+                  .map(
+                    (v) => `
+                <button class="fila-actividad" data-abrir-venta="${v.id}">
+                  <div>
+                    <span class="fila-actividad-titulo">Venta #${v.id}</span>
+                    <span class="fila-actividad-fecha">${UI.formatoFechaRelativa(v.fecha)}</span>
+                  </div>
+                  <span class="fila-actividad-monto">${UI.formatoMoneda(v.total)}</span>
+                </button>
+              `
+                  )
+                  .join('')
+          }
+        </div>
+      </section>
+
+      <section class="seccion-bloque">
+        <div class="titulo-seccion-fila">
+          <h3>Productos con poco stock</h3>
+          <button class="enlace-boton" data-pantalla="inventario">Ver inventario</button>
+        </div>
+        <div class="lista-poco-stock">
+          ${
+            pocoStock.length === 0
+              ? '<p class="estado-vacio">Todo el inventario está en buen nivel.</p>'
+              : pocoStock
+                  .map(
+                    (p) => `
+                <div class="fila-poco-stock">
+                  <span>${p.nombre}</span>
+                  <span class="etiqueta etiqueta-aviso">${p.stock} unidad${p.stock === 1 ? '' : 'es'}</span>
+                </div>
+              `
+                  )
+                  .join('')
+          }
+        </div>
+      </section>
+    `;
+
+    cont.querySelectorAll('[data-abrir-venta]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        UI.irAPantalla('ventas');
+        Historial.abrirDetalle(btn.dataset.abrirVenta);
+      });
+    });
+  }
+
+  return { renderizar };
+})();
+
+
+/**
+ * historial.js
+ * Pantalla "Ventas": historial de ventas registradas, con busqueda, filtro por fecha y detalle.
+ */
+
+const Historial = (function () {
+  let filtroTexto = '';
+  let filtroFecha = 'todas'; // todas | hoy | semana
+
+  function renderizar() {
+    const cont = document.getElementById('pantalla-ventas');
+    if (!cont) return;
+
+    cont.innerHTML = `
+      <div class="encabezado-pantalla">
+        <h2>Ventas</h2>
+      </div>
+
+      <div class="buscador-venta">
+        <span class="buscador-icono">🔍</span>
+        <input type="search" id="input-buscar-venta" placeholder="Buscar venta por número o producto..." autocomplete="off">
+      </div>
+
+      <div class="chips-categoria" id="chips-filtro-fecha">
+        <button class="chip chip-activo" data-fecha="todas">Todas</button>
+        <button class="chip" data-fecha="hoy">Hoy</button>
+        <button class="chip" data-fecha="semana">Últimos 7 días</button>
+      </div>
+
+      <div class="lista-ventas" id="lista-ventas"></div>
+    `;
+
+    document.getElementById('input-buscar-venta').addEventListener('input', (e) => {
+      filtroTexto = e.target.value;
+      renderizarLista();
+    });
+    cont.querySelectorAll('#chips-filtro-fecha .chip').forEach((chip) => {
+      chip.addEventListener('click', () => {
+        filtroFecha = chip.dataset.fecha;
+        cont.querySelectorAll('#chips-filtro-fecha .chip').forEach((c) => c.classList.remove('chip-activo'));
+        chip.classList.add('chip-activo');
+        renderizarLista();
+      });
+    });
+
+    renderizarLista();
+  }
+
+  function normalizar(texto) {
+    return texto
+      .toString()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+  }
+
+  function coincideFiltroFecha(venta) {
+    if (filtroFecha === 'todas') return true;
+    const fecha = new Date(venta.fecha);
+    const ahora = new Date();
+    if (filtroFecha === 'hoy') {
+      return (
+        fecha.getFullYear() === ahora.getFullYear() &&
+        fecha.getMonth() === ahora.getMonth() &&
+        fecha.getDate() === ahora.getDate()
+      );
+    }
+    if (filtroFecha === 'semana') {
+      const haceUnaSemana = new Date();
+      haceUnaSemana.setDate(ahora.getDate() - 7);
+      return fecha >= haceUnaSemana;
+    }
+    return true;
+  }
+
+  function renderizarLista() {
+    const cont = document.getElementById('lista-ventas');
+    const ventas = Storage.getVentas().filter((v) => {
+      if (!coincideFiltroFecha(v)) return false;
+      if (!filtroTexto) return true;
+      const texto = normalizar(filtroTexto);
+      if (String(v.id).includes(texto)) return true;
+      return v.items.some((it) => normalizar(it.nombre).includes(texto));
+    });
+
+    if (ventas.length === 0) {
+      cont.innerHTML = '<p class="estado-vacio">No se encontraron ventas.</p>';
+      return;
+    }
+
+    cont.innerHTML = ventas
+      .map(
+        (v) => `
+      <button class="fila-venta" data-ver-venta="${v.id}">
+        <div>
+          <span class="fila-venta-folio">Venta #${v.id}</span>
+          <span class="fila-venta-fecha">${UI.formatoFechaCorta(v.fecha)}</span>
+        </div>
+        <span class="fila-venta-total">${UI.formatoMoneda(v.total)}</span>
+      </button>
+    `
+      )
+      .join('');
+
+    cont.querySelectorAll('[data-ver-venta]').forEach((btn) => {
+      btn.addEventListener('click', () => abrirDetalle(btn.dataset.verVenta));
+    });
+  }
+
+  function abrirDetalle(id) {
+    const venta = Storage.getVenta(id);
+    if (!venta) {
+      UI.mostrarToast('No se encontró esa venta.', 'error');
+      return;
+    }
+
+    document.getElementById('detalle-venta-folio').textContent = `Venta #${venta.id}`;
+    document.getElementById('detalle-venta-fecha').textContent = UI.formatoFechaCorta(venta.fecha);
+    document.getElementById('detalle-venta-total').textContent = UI.formatoMoneda(venta.total);
+    document.getElementById('detalle-venta-items').innerHTML = venta.items
+      .map(
+        (it) => `
+      <div class="detalle-venta-item">
+        <span>${it.nombre} × ${it.cantidad} ${it.esRapido ? '<span class="etiqueta etiqueta-rapido-mini">rápido</span>' : ''}</span>
+        <span>${UI.formatoMoneda(it.subtotal)}</span>
+      </div>
+    `
+      )
+      .join('');
+
+    UI.abrirModal('modal-detalle-venta');
+  }
+
+  return { renderizar, abrirDetalle };
+})();
+
+
+/**
+ * ventas.js
+ * Pantalla "Nueva venta": el modulo mas importante de la app.
+ * Busqueda + categorias + grid de productos + carrito + producto rapido + confirmar venta.
+ */
+
+const Ventas = (function () {
+  let carrito = [];
+  let filtroTexto = '';
+  let categoriaActiva = 'Todos';
+  let indiceRapidoAGuardar = null; // indice del item del carrito que se esta convirtiendo en producto de inventario
+
+  function normalizar(texto) {
+    return texto
+      .toString()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+  }
+
+  // ---- ciclo de vida ------------------------------------------------
+
+  function renderizar() {
+    carrito = Storage.getCarrito();
+    const cont = document.getElementById('pantalla-venta');
+    if (!cont) return;
+
+    cont.innerHTML = `
+      <div class="venta-layout">
+        <div class="venta-panel-productos">
+          <div class="encabezado-pantalla encabezado-venta">
+            <h2>Nueva venta</h2>
+            <button class="btn-producto-rapido" id="btn-abrir-producto-rapido">
+              <span>+</span> Producto rápido
+            </button>
+          </div>
+
+          <div class="buscador-venta">
+            <span class="buscador-icono">🔍</span>
+            <input type="search" id="input-buscar-producto" placeholder="Buscar producto..." autocomplete="off">
+          </div>
+
+          <div class="chips-categoria" id="chips-categoria"></div>
+
+          <div class="grid-productos" id="grid-productos"></div>
+        </div>
+
+        <aside class="venta-carrito" id="panel-carrito">
+          <button class="carrito-peek" id="carrito-peek">
+            <div class="carrito-peek-info">
+              <span class="carrito-peek-cantidad" id="carrito-peek-cantidad">0 productos</span>
+              <span class="carrito-peek-total" id="carrito-peek-total">C$0.00</span>
+            </div>
+            <span class="carrito-peek-flecha">▲</span>
+          </button>
+
+          <div class="carrito-cuerpo">
+            <div class="carrito-titulo-fila">
+              <h3>Venta actual</h3>
+              <button class="enlace-boton enlace-peligro" id="btn-vaciar-carrito">Vaciar</button>
+            </div>
+            <div class="carrito-items" id="carrito-items"></div>
+            <div class="carrito-total-fila">
+              <span>TOTAL</span>
+              <span id="carrito-total">C$0.00</span>
+            </div>
+            <button class="btn-confirmar-venta" id="btn-confirmar-venta">Confirmar venta</button>
+          </div>
+        </aside>
+      </div>
+    `;
+
+    renderizarChips();
+    renderizarProductos();
+    renderizarCarrito();
+    adjuntarEventos();
+  }
+
+  function adjuntarEventos() {
+    document.getElementById('input-buscar-producto').addEventListener('input', (e) => {
+      filtroTexto = e.target.value;
+      renderizarProductos();
+    });
+
+    document.getElementById('btn-abrir-producto-rapido').addEventListener('click', abrirModalProductoRapido);
+    document.getElementById('btn-vaciar-carrito').addEventListener('click', confirmarVaciarCarrito);
+    document.getElementById('btn-confirmar-venta').addEventListener('click', abrirConfirmacionVenta);
+    document.getElementById('carrito-peek').addEventListener('click', () => {
+      document.getElementById('panel-carrito').classList.toggle('carrito-expandido');
+    });
+  }
+
+  // ---- categorias -----------------------------------------------------
+
+  function renderizarChips() {
+    const cont = document.getElementById('chips-categoria');
+    const chipsCategoria = ['Todos', ...Storage.getCategorias()];
+    cont.innerHTML = chipsCategoria.map(
+      (cat) => `<button class="chip ${cat === categoriaActiva ? 'chip-activo' : ''}" data-categoria="${cat}">${cat}</button>`
+    ).join('');
+
+    cont.querySelectorAll('.chip').forEach((chip) => {
+      chip.addEventListener('click', () => {
+        categoriaActiva = chip.dataset.categoria;
+        renderizarChips();
+        renderizarProductos();
+      });
+    });
+  }
+
+  // ---- grid de productos -----------------------------------------------
+
+  function renderizarProductos() {
+    const cont = document.getElementById('grid-productos');
+    const productos = Storage.getProductos().filter((p) => {
+      const coincideTexto = !filtroTexto || normalizar(p.nombre).includes(normalizar(filtroTexto));
+      const coincideCategoria = categoriaActiva === 'Todos' || p.categoria === categoriaActiva;
+      return coincideTexto && coincideCategoria;
+    });
+
+    if (productos.length === 0) {
+      cont.innerHTML = `<p class="estado-vacio estado-vacio-grid">No se encontraron productos. Puedes agregarlo con "+ Producto rápido".</p>`;
+      return;
+    }
+
+    cont.innerHTML = productos
+      .map((p) => {
+        const agotado = p.estado === 'agotado';
+        const pocoStock = p.estado === 'poco_stock';
+        return `
+        <div class="tarjeta-producto ${agotado ? 'tarjeta-producto-agotada' : ''}">
+          ${pocoStock ? '<span class="tarjeta-producto-badge">Poco stock</span>' : ''}
+          ${agotado ? '<span class="tarjeta-producto-badge tarjeta-producto-badge-agotado">Agotado</span>' : ''}
+          <span class="tarjeta-producto-nombre">${p.nombre}</span>
+          <span class="tarjeta-producto-precio">${UI.formatoMoneda(p.precio)}</span>
+          <span class="tarjeta-producto-stock">Stock: ${p.stock}</span>
+          <button class="tarjeta-producto-boton" data-agregar="${p.id}" ${agotado ? 'disabled' : ''}>+</button>
+        </div>
+      `;
+      })
+      .join('');
+
+    cont.querySelectorAll('[data-agregar]').forEach((btn) => {
+      btn.addEventListener('click', () => agregarProductoRegistrado(btn.dataset.agregar));
+    });
+  }
+
+  // ---- carrito ----------------------------------------------------------
+
+  function persistirCarrito() {
+    Storage.guardarCarrito(carrito);
+  }
+
+  function recalcularSubtotal(item) {
+    item.subtotal = Storage.redondear(item.precioUnitario * item.cantidad);
+  }
+
+  function agregarProductoRegistrado(productoId) {
+    const producto = Storage.getProducto(productoId);
+    if (!producto) return;
+
+    const existente = carrito.find((i) => i.productoId === productoId);
+    const cantidadActual = existente ? existente.cantidad : 0;
+
+    if (cantidadActual + 1 > producto.stock) {
+      UI.mostrarToast(`No hay suficiente inventario disponible de "${producto.nombre}".`, 'error');
+      return;
+    }
+
+    if (existente) {
+      existente.cantidad += 1;
+      recalcularSubtotal(existente);
+    } else {
+      carrito.push({
+        productoId: producto.id,
+        nombre: producto.nombre,
+        precioUnitario: producto.precio,
+        cantidad: 1,
+        subtotal: producto.precio,
+        esRapido: false,
+      });
+    }
+
+    persistirCarrito();
+    renderizarCarrito();
+    UI.mostrarToast(`${producto.nombre} agregado`, 'exito');
+  }
+
+  function cambiarCantidad(indice, delta) {
+    const item = carrito[indice];
+    if (!item) return;
+
+    if (!item.esRapido) {
+      const producto = Storage.getProducto(item.productoId);
+      const stockDisponible = producto ? producto.stock : 0;
+      if (delta > 0 && item.cantidad + delta > stockDisponible) {
+        UI.mostrarToast(`No hay suficiente inventario disponible de "${item.nombre}".`, 'error');
+        return;
+      }
+    }
+
+    item.cantidad += delta;
+    if (item.cantidad <= 0) {
+      carrito.splice(indice, 1);
+    } else {
+      recalcularSubtotal(item);
+    }
+    persistirCarrito();
+    renderizarCarrito();
+  }
+
+  function eliminarDelCarrito(indice) {
+    carrito.splice(indice, 1);
+    persistirCarrito();
+    renderizarCarrito();
+  }
+
+  function confirmarVaciarCarrito() {
+    if (carrito.length === 0) return;
+    if (confirm('¿Vaciar todos los productos de la venta actual?')) {
+      carrito = [];
+      persistirCarrito();
+      renderizarCarrito();
+    }
+  }
+
+  function renderizarCarrito() {
+    const contItems = document.getElementById('carrito-items');
+    const total = Storage.redondear(carrito.reduce((s, i) => s + i.subtotal, 0));
+    const cantidadTotal = carrito.reduce((s, i) => s + i.cantidad, 0);
+
+    document.getElementById('carrito-peek-cantidad').textContent = `${cantidadTotal} producto${cantidadTotal === 1 ? '' : 's'}`;
+    document.getElementById('carrito-peek-total').textContent = UI.formatoMoneda(total);
+    document.getElementById('carrito-total').textContent = UI.formatoMoneda(total);
+    document.getElementById('btn-confirmar-venta').disabled = carrito.length === 0;
+
+    if (carrito.length === 0) {
+      contItems.innerHTML = '<p class="estado-vacio">Agrega productos para iniciar la venta.</p>';
+      return;
+    }
+
+    contItems.innerHTML = carrito
+      .map(
+        (item, indice) => `
+      <div class="item-carrito">
+        <div class="item-carrito-info">
+          <span class="item-carrito-nombre">${item.nombre}</span>
+          ${item.esRapido ? `<button class="etiqueta etiqueta-rapido" data-guardar-inventario="${indice}">Producto rápido · Guardar en inventario</button>` : ''}
+        </div>
+        <div class="item-carrito-controles">
+          <button class="btn-cantidad" data-cantidad="${indice}" data-delta="-1">−</button>
+          <span class="item-carrito-cantidad">${item.cantidad}</span>
+          <button class="btn-cantidad" data-cantidad="${indice}" data-delta="1">+</button>
+        </div>
+        <div class="item-carrito-precios">
+          <span class="item-carrito-preciounit">${UI.formatoMoneda(item.precioUnitario)} c/u</span>
+          <span class="item-carrito-subtotal">${UI.formatoMoneda(item.subtotal)}</span>
+        </div>
+        <button class="item-carrito-eliminar" data-eliminar="${indice}" aria-label="Eliminar">🗑</button>
+      </div>
+    `
+      )
+      .join('');
+
+    contItems.querySelectorAll('[data-cantidad]').forEach((btn) => {
+      btn.addEventListener('click', () => cambiarCantidad(Number(btn.dataset.cantidad), Number(btn.dataset.delta)));
+    });
+    contItems.querySelectorAll('[data-eliminar]').forEach((btn) => {
+      btn.addEventListener('click', () => eliminarDelCarrito(Number(btn.dataset.eliminar)));
+    });
+    contItems.querySelectorAll('[data-guardar-inventario]').forEach((btn) => {
+      btn.addEventListener('click', () => abrirModalGuardarInventario(Number(btn.dataset.guardarInventario)));
+    });
+  }
+
+  // ---- producto rapido --------------------------------------------------
+
+  function abrirModalProductoRapido() {
+    const form = document.getElementById('form-producto-rapido');
+    form.reset();
+    UI.abrirModal('modal-producto-rapido');
+  }
+
+  function manejarSubmitProductoRapido(e) {
+    e.preventDefault();
+    const nombre = document.getElementById('rapido-nombre').value.trim();
+    const precio = Number(document.getElementById('rapido-precio').value);
+    const cantidad = Number(document.getElementById('rapido-cantidad').value);
+
+    if (!nombre) {
+      UI.mostrarToast('Escribe el nombre del producto.', 'error');
+      return;
+    }
+    if (!Number.isFinite(precio) || precio <= 0) {
+      UI.mostrarToast('El precio debe ser mayor a cero.', 'error');
+      return;
+    }
+    if (!Number.isInteger(cantidad) || cantidad <= 0) {
+      UI.mostrarToast('La cantidad debe ser un número entero mayor a cero.', 'error');
+      return;
+    }
+
+    carrito.push({
+      productoId: null,
+      nombre,
+      precioUnitario: Storage.redondear(precio),
+      cantidad,
+      subtotal: Storage.redondear(precio * cantidad),
+      esRapido: true,
+    });
+    persistirCarrito();
+    renderizarCarrito();
+    UI.cerrarModal('modal-producto-rapido');
+    UI.mostrarToast(`${nombre} agregado a la venta`, 'exito');
+  }
+
+  // ---- guardar producto rapido en inventario -----------------------------
+
+  function abrirModalGuardarInventario(indice) {
+    const item = carrito[indice];
+    if (!item) return;
+    indiceRapidoAGuardar = indice;
+
+    const form = document.getElementById('form-guardar-inventario');
+    form.reset();
+    document.getElementById('guardar-inv-nombre').value = item.nombre;
+    document.getElementById('guardar-inv-precio').value = item.precioUnitario;
+    UI.llenarSelectCategorias(document.getElementById('guardar-inv-categoria'), '');
+    UI.abrirModal('modal-guardar-inventario');
+  }
+
+  function manejarSubmitGuardarInventario(e) {
+    e.preventDefault();
+    if (indiceRapidoAGuardar === null) return;
+
+    const item = carrito[indiceRapidoAGuardar];
+    if (!item) return;
+
+    const categoria = document.getElementById('guardar-inv-categoria').value;
+    const stockInicial = Number(document.getElementById('guardar-inv-stock').value);
+    const precio = Number(document.getElementById('guardar-inv-precio').value);
+
+    if (!categoria || categoria === '__nueva__') {
+      UI.mostrarToast('Selecciona una categoría.', 'error');
+      return;
+    }
+    if (!Number.isInteger(stockInicial) || stockInicial < 0) {
+      UI.mostrarToast('El stock inicial debe ser 0 o un número entero positivo.', 'error');
+      return;
+    }
+
+    const nuevoProducto = Storage.crearProducto({
+      nombre: item.nombre,
+      categoria,
+      precio,
+      stock: stockInicial,
+    });
+
+    item.productoId = nuevoProducto.id;
+    item.esRapido = false;
+    persistirCarrito();
+    renderizarCarrito();
+    UI.cerrarModal('modal-guardar-inventario');
+    UI.mostrarToast(`"${nuevoProducto.nombre}" ahora está en tu inventario`, 'exito');
+    indiceRapidoAGuardar = null;
+  }
+
+  // ---- confirmar venta ----------------------------------------------------
+
+  function abrirConfirmacionVenta() {
+    if (carrito.length === 0) return;
+    const total = Storage.redondear(carrito.reduce((s, i) => s + i.subtotal, 0));
+    const cantidadProductos = carrito.reduce((s, i) => s + i.cantidad, 0);
+
+    document.getElementById('confirmar-venta-cantidad').textContent = cantidadProductos;
+    document.getElementById('confirmar-venta-total').textContent = UI.formatoMoneda(total);
+    UI.abrirModal('modal-confirmar-venta');
+  }
+
+  function confirmarVentaFinal() {
+    try {
+      const venta = Storage.registrarVenta(carrito);
+      carrito = [];
+      UI.cerrarModal('modal-confirmar-venta');
+      mostrarPantallaExito(venta);
+    } catch (err) {
+      UI.cerrarModal('modal-confirmar-venta');
+      UI.mostrarToast(err.message || 'No se pudo registrar la venta.', 'error');
+      renderizarProductos();
+      renderizarCarrito();
+    }
+  }
+
+  function mostrarPantallaExito(venta) {
+    document.getElementById('exito-venta-folio').textContent = `Venta #${venta.id}`;
+    document.getElementById('exito-venta-total').textContent = UI.formatoMoneda(venta.total);
+    document.getElementById('modal-exito-venta').dataset.ventaId = venta.id;
+    UI.abrirModal('modal-exito-venta');
+  }
+
+  function iniciarNuevaVentaDesdeExito() {
+    UI.cerrarModal('modal-exito-venta');
+    renderizarProductos();
+    renderizarCarrito();
+  }
+
+  function verVentaDesdeExito() {
+    const idVenta = document.getElementById('modal-exito-venta').dataset.ventaId;
+    UI.cerrarModal('modal-exito-venta');
+    UI.irAPantalla('ventas');
+    Historial.abrirDetalle(idVenta);
+  }
+
+  function inicializarEventosGlobales() {
+    document.getElementById('form-producto-rapido').addEventListener('submit', manejarSubmitProductoRapido);
+    document.getElementById('form-guardar-inventario').addEventListener('submit', manejarSubmitGuardarInventario);
+    document.getElementById('btn-cancelar-confirmar-venta').addEventListener('click', () => UI.cerrarModal('modal-confirmar-venta'));
+    document.getElementById('btn-aceptar-confirmar-venta').addEventListener('click', confirmarVentaFinal);
+    document.getElementById('btn-exito-nueva-venta').addEventListener('click', iniciarNuevaVentaDesdeExito);
+    document.getElementById('btn-exito-ver-venta').addEventListener('click', verVentaDesdeExito);
+  }
+
+  return { renderizar, inicializarEventosGlobales };
+})();
+
+
+/**
+ * inventario.js
+ * Pantalla "Inventario": listar, buscar, filtrar, agregar/editar productos y sumar stock.
+ */
+
+const Inventario = (function () {
+  let filtroTexto = '';
+  let filtroEstado = 'todos';
+  let idProductoEnEdicion = null;
+  let idProductoParaStock = null;
+
+  function normalizar(texto) {
+    return texto
+      .toString()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+  }
+
+  function renderizar() {
+    const cont = document.getElementById('pantalla-inventario');
+    if (!cont) return;
+
+    cont.innerHTML = `
+      <div class="encabezado-pantalla encabezado-con-boton">
+        <h2>Inventario</h2>
+        <button class="btn-primario" id="btn-nuevo-producto">+ Agregar producto</button>
+      </div>
+
+      <div class="buscador-venta">
+        <span class="buscador-icono">🔍</span>
+        <input type="search" id="input-buscar-inventario" placeholder="Buscar producto..." autocomplete="off">
+      </div>
+
+      <div class="chips-categoria" id="chips-filtro-estado">
+        <button class="chip chip-activo" data-estado="todos">Todos</button>
+        <button class="chip" data-estado="disponible">Disponibles</button>
+        <button class="chip" data-estado="poco_stock">Poco stock</button>
+        <button class="chip" data-estado="agotado">Agotados</button>
+      </div>
+
+      <div class="lista-inventario" id="lista-inventario"></div>
+    `;
+
+    document.getElementById('btn-nuevo-producto').addEventListener('click', abrirModalNuevoProducto);
+    document.getElementById('input-buscar-inventario').addEventListener('input', (e) => {
+      filtroTexto = e.target.value;
+      renderizarLista();
+    });
+    cont.querySelectorAll('#chips-filtro-estado .chip').forEach((chip) => {
+      chip.addEventListener('click', () => {
+        filtroEstado = chip.dataset.estado;
+        cont.querySelectorAll('#chips-filtro-estado .chip').forEach((c) => c.classList.remove('chip-activo'));
+        chip.classList.add('chip-activo');
+        renderizarLista();
+      });
+    });
+
+    renderizarLista();
+  }
+
+  function etiquetaEstado(estado) {
+    if (estado === 'agotado') return { texto: 'Agotado', clase: 'etiqueta-peligro' };
+    if (estado === 'poco_stock') return { texto: 'Poco stock', clase: 'etiqueta-aviso' };
+    return { texto: 'Disponible', clase: 'etiqueta-exito' };
+  }
+
+  function renderizarLista() {
+    const cont = document.getElementById('lista-inventario');
+    const productos = Storage.getProductos()
+      .filter((p) => filtroEstado === 'todos' || p.estado === filtroEstado)
+      .filter((p) => !filtroTexto || normalizar(p.nombre).includes(normalizar(filtroTexto)))
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+
+    if (productos.length === 0) {
+      cont.innerHTML = '<p class="estado-vacio">No hay productos que coincidan con este filtro.</p>';
+      return;
+    }
+
+    cont.innerHTML = productos
+      .map((p) => {
+        const estado = etiquetaEstado(p.estado);
+        return `
+        <div class="fila-inventario">
+          <button class="fila-inventario-eliminar" data-eliminar-producto="${p.id}" aria-label="Eliminar producto" title="Eliminar producto">🗑</button>
+          <div class="fila-inventario-principal">
+            <div>
+              <span class="fila-inventario-nombre">${p.nombre}</span>
+              <span class="fila-inventario-categoria">${p.categoria}</span>
+            </div>
+            <span class="fila-inventario-precio">${UI.formatoMoneda(p.precio)}</span>
+          </div>
+          <div class="fila-inventario-secundaria">
+            <span class="etiqueta ${estado.clase}">${estado.texto}</span>
+            <span class="fila-inventario-stock">Stock: ${p.stock} unidades</span>
+          </div>
+          <div class="fila-inventario-acciones">
+            <button class="btn-secundario" data-editar="${p.id}">Editar</button>
+            <button class="btn-secundario" data-agregar-stock="${p.id}">+ Agregar stock</button>
+          </div>
+        </div>
+      `;
+      })
+      .join('');
+
+    cont.querySelectorAll('[data-editar]').forEach((btn) => {
+      btn.addEventListener('click', () => abrirModalEditarProducto(btn.dataset.editar));
+    });
+    cont.querySelectorAll('[data-agregar-stock]').forEach((btn) => {
+      btn.addEventListener('click', () => abrirModalAgregarStock(btn.dataset.agregarStock));
+    });
+    cont.querySelectorAll('[data-eliminar-producto]').forEach((btn) => {
+      btn.addEventListener('click', () => eliminarProducto(btn.dataset.eliminarProducto));
+    });
+  }
+
+  function eliminarProducto(id) {
+    const producto = Storage.getProducto(id);
+    if (!producto) return;
+    const confirmado = confirm(`¿Eliminar "${producto.nombre}" del inventario? Esta acción no se puede deshacer.`);
+    if (!confirmado) return;
+
+    try {
+      Storage.eliminarProducto(id);
+      UI.mostrarToast(`"${producto.nombre}" fue eliminado del inventario`, 'exito');
+      renderizarLista();
+    } catch (err) {
+      UI.mostrarToast(err.message, 'error');
+    }
+  }
+
+  // ---- modal nuevo / editar producto -------------------------------------
+
+  function abrirModalNuevoProducto() {
+    idProductoEnEdicion = null;
+    document.getElementById('titulo-modal-producto').textContent = 'Nuevo producto';
+    document.getElementById('form-producto').reset();
+    UI.llenarSelectCategorias(document.getElementById('producto-categoria'), '');
+    UI.abrirModal('modal-producto');
+  }
+
+  function abrirModalEditarProducto(id) {
+    const producto = Storage.getProducto(id);
+    if (!producto) return;
+    idProductoEnEdicion = id;
+
+    document.getElementById('titulo-modal-producto').textContent = 'Editar producto';
+    document.getElementById('producto-nombre').value = producto.nombre;
+    document.getElementById('producto-precio').value = producto.precio;
+    document.getElementById('producto-stock').value = producto.stock;
+    UI.llenarSelectCategorias(document.getElementById('producto-categoria'), producto.categoria);
+    UI.abrirModal('modal-producto');
+  }
+
+  function manejarSubmitProducto(e) {
+    e.preventDefault();
+    const nombre = document.getElementById('producto-nombre').value.trim();
+    const categoria = document.getElementById('producto-categoria').value;
+    const precio = Number(document.getElementById('producto-precio').value);
+    const stock = Number(document.getElementById('producto-stock').value);
+
+    if (!nombre) {
+      UI.mostrarToast('Escribe el nombre del producto.', 'error');
+      return;
+    }
+    if (!categoria || categoria === '__nueva__') {
+      UI.mostrarToast('Selecciona una categoría.', 'error');
+      return;
+    }
+    if (!Number.isFinite(precio) || precio <= 0) {
+      UI.mostrarToast('El precio debe ser mayor a cero.', 'error');
+      return;
+    }
+    if (!Number.isInteger(stock) || stock < 0) {
+      UI.mostrarToast('El stock debe ser 0 o un número entero positivo.', 'error');
+      return;
+    }
+
+    if (idProductoEnEdicion) {
+      Storage.actualizarProducto(idProductoEnEdicion, { nombre, categoria, precio, stock });
+      UI.mostrarToast('Producto actualizado', 'exito');
+    } else {
+      Storage.crearProducto({ nombre, categoria, precio, stock });
+      UI.mostrarToast('Producto agregado al inventario', 'exito');
+    }
+
+    UI.cerrarModal('modal-producto');
+    renderizarLista();
+  }
+
+  // ---- modal agregar stock --------------------------------------------
+
+  function abrirModalAgregarStock(id) {
+    const producto = Storage.getProducto(id);
+    if (!producto) return;
+    idProductoParaStock = id;
+
+    document.getElementById('form-agregar-stock').reset();
+    document.getElementById('agregar-stock-nombre').textContent = producto.nombre;
+    document.getElementById('agregar-stock-actual').textContent = `Stock actual: ${producto.stock} unidades`;
+    UI.abrirModal('modal-agregar-stock');
+  }
+
+  function manejarSubmitAgregarStock(e) {
+    e.preventDefault();
+    if (!idProductoParaStock) return;
+
+    const cantidad = Number(document.getElementById('agregar-stock-cantidad').value);
+    if (!Number.isInteger(cantidad) || cantidad <= 0) {
+      UI.mostrarToast('Ingresa una cantidad entera mayor a cero.', 'error');
+      return;
+    }
+
+    try {
+      const producto = Storage.agregarStock(idProductoParaStock, cantidad);
+      UI.cerrarModal('modal-agregar-stock');
+      UI.mostrarToast(`Nuevo stock de "${producto.nombre}": ${producto.stock} unidades`, 'exito');
+      renderizarLista();
+    } catch (err) {
+      UI.mostrarToast(err.message, 'error');
+    }
+    idProductoParaStock = null;
+  }
+
+  function inicializarEventosGlobales() {
+    document.getElementById('form-producto').addEventListener('submit', manejarSubmitProducto);
+    document.getElementById('form-agregar-stock').addEventListener('submit', manejarSubmitAgregarStock);
+  }
+
+  return { renderizar, inicializarEventosGlobales };
+})();
+
+
+/**
+ * resumen.js
+ * Pantalla "Resumen": estadisticas del negocio, grafico de ventas de los ultimos 7 dias
+ * y ranking de productos mas vendidos. El grafico se dibuja con barras CSS simples
+ * (sin depender de ninguna libreria externa).
+ */
+
+const Resumen = (function () {
+  function inicioDelDia(fecha) {
+    const f = new Date(fecha);
+    f.setHours(0, 0, 0, 0);
+    return f;
+  }
+
+  function renderizar() {
+    const cont = document.getElementById('pantalla-resumen');
+    if (!cont) return;
+
+    const ventas = Storage.getVentas();
+    const ventasHoy = Storage.getVentasDeHoy();
+    const totalHoy = Storage.redondear(ventasHoy.reduce((s, v) => s + v.total, 0));
+
+    const haceUnaSemana = new Date();
+    haceUnaSemana.setDate(haceUnaSemana.getDate() - 6);
+    haceUnaSemana.setHours(0, 0, 0, 0);
+    const ventasSemana = ventas.filter((v) => new Date(v.fecha) >= haceUnaSemana);
+    const totalSemana = Storage.redondear(ventasSemana.reduce((s, v) => s + v.total, 0));
+
+    const unidadesVendidasSemana = ventasSemana.reduce(
+      (s, v) => s + v.items.reduce((si, it) => si + it.cantidad, 0),
+      0
+    );
+    const ticketPromedio = ventasSemana.length > 0 ? Storage.redondear(totalSemana / ventasSemana.length) : 0;
+
+    const datosGrafico = construirDatosUltimos7Dias(ventas);
+    const maxDia = Math.max(1, ...datosGrafico.map((d) => d.total));
+
+    const productosMasVendidos = construirRankingProductos(ventasSemana);
+
+    cont.innerHTML = `
+      <div class="encabezado-pantalla">
+        <h2>Resumen</h2>
+      </div>
+
+      <div class="grid-stats">
+        <div class="tarjeta-stat">
+          <span class="stat-etiqueta">Ventas de hoy</span>
+          <span class="stat-valor stat-valor-dinero">${UI.formatoMoneda(totalHoy)}</span>
+        </div>
+        <div class="tarjeta-stat">
+          <span class="stat-etiqueta">Ventas de esta semana</span>
+          <span class="stat-valor stat-valor-dinero">${UI.formatoMoneda(totalSemana)}</span>
+        </div>
+        <div class="tarjeta-stat">
+          <span class="stat-etiqueta">Productos vendidos</span>
+          <span class="stat-valor">${unidadesVendidasSemana}</span>
+        </div>
+        <div class="tarjeta-stat">
+          <span class="stat-etiqueta">Ticket promedio</span>
+          <span class="stat-valor stat-valor-dinero">${UI.formatoMoneda(ticketPromedio)}</span>
+        </div>
+      </div>
+
+      <section class="seccion-bloque">
+        <h3>Ventas de los últimos 7 días</h3>
+        <div class="grafico-barras">
+          ${datosGrafico
+            .map((d) => {
+              const alturaPorc = Math.max(4, Math.round((d.total / maxDia) * 100));
+              return `
+              <div class="grafico-barra-col">
+                <span class="grafico-barra-valor">${d.total > 0 ? UI.formatoMoneda(d.total) : ''}</span>
+                <div class="grafico-barra" style="height: ${alturaPorc}%"></div>
+                <span class="grafico-barra-etiqueta">${d.etiqueta}</span>
+              </div>
+            `;
+            })
+            .join('')}
+        </div>
+      </section>
+
+      <section class="seccion-bloque">
+        <h3>Productos más vendidos</h3>
+        <div class="lista-ranking">
+          ${
+            productosMasVendidos.length === 0
+              ? '<p class="estado-vacio">Todavía no hay suficientes ventas esta semana.</p>'
+              : productosMasVendidos
+                  .map((p, i) => {
+                    const anchoPorc = Math.max(6, Math.round((p.unidades / productosMasVendidos[0].unidades) * 100));
+                    return `
+                <div class="fila-ranking">
+                  <span class="fila-ranking-puesto fila-ranking-puesto-${i + 1}">${i + 1}</span>
+                  <div class="fila-ranking-detalle">
+                    <div class="fila-ranking-cabecera">
+                      <span class="fila-ranking-nombre">${p.nombre}</span>
+                      <span class="fila-ranking-unidades">${p.unidades} unid.</span>
+                    </div>
+                    <div class="fila-ranking-barra-fondo">
+                      <div class="fila-ranking-barra-relleno" style="width: ${anchoPorc}%"></div>
+                    </div>
+                  </div>
+                </div>
+              `;
+                  })
+                  .join('')
+          }
+        </div>
+      </section>
+    `;
+  }
+
+  function construirDatosUltimos7Dias(ventas) {
+    const dias = [];
+    for (let i = 6; i >= 0; i--) {
+      const fecha = new Date();
+      fecha.setDate(fecha.getDate() - i);
+      const inicio = inicioDelDia(fecha);
+      const fin = new Date(inicio);
+      fin.setDate(fin.getDate() + 1);
+
+      const totalDia = Storage.redondear(
+        ventas
+          .filter((v) => {
+            const f = new Date(v.fecha);
+            return f >= inicio && f < fin;
+          })
+          .reduce((s, v) => s + v.total, 0)
+      );
+
+      dias.push({
+        etiqueta: i === 0 ? 'Hoy' : fecha.toLocaleDateString('es-NI', { weekday: 'short' }).replace('.', ''),
+        total: totalDia,
+      });
+    }
+    return dias;
+  }
+
+  function construirRankingProductos(ventas) {
+    const conteo = new Map();
+    ventas.forEach((v) => {
+      v.items.forEach((it) => {
+        const previo = conteo.get(it.nombre) || 0;
+        conteo.set(it.nombre, previo + it.cantidad);
+      });
+    });
+    return Array.from(conteo.entries())
+      .map(([nombre, unidades]) => ({ nombre, unidades }))
+      .sort((a, b) => b.unidades - a.unidades)
+      .slice(0, 5);
+  }
+
+  return { renderizar };
+})();
+
+
+/**
+ * app.js
+ * Punto de entrada de la aplicacion. Inicializa los datos de demostracion,
+ * la navegacion, y decide que modulo renderizar segun la pantalla activa.
+ */
+
+document.addEventListener('DOMContentLoaded', () => {
+  Storage.sembrarSiNecesario();
+
+  UI.inicializarNavegacion();
+  UI.inicializarCierreGlobalModales();
+  Ventas.inicializarEventosGlobales();
+  Inventario.inicializarEventosGlobales();
+
+  const renderizadoresPorPantalla = {
+    inicio: Dashboard.renderizar,
+    venta: Ventas.renderizar,
+    inventario: Inventario.renderizar,
+    ventas: Historial.renderizar,
+    resumen: Resumen.renderizar,
+  };
+
+  UI.onCambioPantalla((nombre) => {
+    const renderizar = renderizadoresPorPantalla[nombre];
+    if (renderizar) renderizar();
+  });
+
+  // Pantalla inicial: "Nueva venta" es lo primero que necesita el vendedor
+  UI.irAPantalla('venta');
+});
+
+</script>
+</body>
+</html>

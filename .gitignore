@@ -1,0 +1,8 @@
+node_modules/
+.env
+*.log
+.DS_Store
+dist/
+build/
+# Hashes de contrasenas para el modo local/offline (los genera npm run security:local)
+public/js/security-config.js
