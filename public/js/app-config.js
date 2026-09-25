@@ -8,4 +8,4 @@
  *
  * No guardes credenciales ni DATABASE_URL en JavaScript.
  */
-window.APP_API_BASE = '';
+window.APP_API_BASE = 'https://motorepuestoslei.onrender.com';
