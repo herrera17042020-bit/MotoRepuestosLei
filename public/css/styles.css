@@ -702,22 +702,44 @@ select:focus-visible,
 }
 
 .item-carrito-cantidad {
-  min-width: 18px;
+  width: 76px;
+  min-height: 28px;
+  padding: 3px 5px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
   text-align: center;
   font-family: var(--fuente-mono);
   font-weight: 600;
 }
+.item-carrito-cantidad-etiqueta { display: flex; flex-direction: column; gap: 3px; align-items: center; font-size: 0.68rem; color: var(--color-text-muted); }
 
 .item-carrito-precios {
   grid-area: precios;
   display: flex;
-  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
   font-size: 0.8rem;
   color: var(--color-text-muted);
   font-family: var(--fuente-mono);
 }
 
 .item-carrito-preciounit { opacity: 0.85; }
+.item-carrito-precio-final { display: inline-flex; align-items: center; gap: 5px; }
+.item-carrito-precio-final input {
+  width: 88px;
+  min-height: 30px;
+  padding: 4px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
+}
+.item-carrito-precio-final input[aria-invalid="true"] { border-color: var(--color-danger); }
 .item-carrito-subtotal { color: var(--color-text); font-weight: 600; }
 
 .item-carrito-eliminar {
@@ -1288,8 +1310,9 @@ body.body-modal-abierto { overflow: hidden; }
   top: 0;
   right: 0;
   height: 100%;
-  width: 46px;
-  font-size: 1.1rem;
+  width: 72px;
+  font-size: 0.75rem;
+  font-weight: 600;
   color: var(--color-text-muted);
 }
 

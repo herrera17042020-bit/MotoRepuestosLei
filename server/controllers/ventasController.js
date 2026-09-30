@@ -1,9 +1,28 @@
 const prisma = require('../services/prisma');
 const { AppError } = require('../middlewares/errorHandler');
-const { planificarEdicion, planificarEliminacion, esDelDiaActual } = require('../../public/js/ventas-logica');
+const VentasLogica = require('../../public/js/ventas-logica');
+const { planificarEdicion, planificarEliminacion, esDelDiaActual } = VentasLogica;
 
-function redondear(valor) {
-  return Math.round(Number(valor) || 0);
+const MAX_PRECIO_CENTAVOS = 9999999999;
+
+function validarPrecio(valor, nombre) {
+  if (typeof valor !== 'number' || !Number.isFinite(valor) || valor <= 0) {
+    throw new AppError(`El precio de "${nombre}" debe ser un número mayor a cero.`, 400);
+  }
+
+  const centavos = Math.round((valor + Number.EPSILON) * 100);
+  if (centavos > MAX_PRECIO_CENTAVOS || Math.abs(valor * 100 - centavos) > 0.000001) {
+    throw new AppError(`El precio de "${nombre}" debe tener hasta dos decimales y no ser demasiado grande.`, 400);
+  }
+  return centavos;
+}
+
+function validarCantidad(valor, nombre, unidadMedida) {
+  try {
+    return VentasLogica.validarCantidad(valor, nombre, unidadMedida);
+  } catch (err) {
+    throw new AppError(err.message, err.status || 400, err.codigo);
+  }
 }
 
 // Zona horaria del negocio: define cuando empieza y termina "el dia" para decidir
@@ -22,7 +41,8 @@ function formatearVenta(venta) {
     items: venta.items.map((item) => ({
       productoId: item.productoId,
       nombre: item.nombre,
-      cantidad: item.cantidad,
+      cantidad: Number(item.cantidad),
+      unidadMedida: VentasLogica.normalizarUnidadMedida(item.unidadMedida),
       precioUnitario: Number(item.precioUnitario),
       subtotal: Number(item.subtotal),
       esRapido: item.esRapido,
@@ -73,18 +93,72 @@ async function getVentaPorId(req, res, next) {
 
 async function registrarVenta(req, res, next) {
   try {
-    const items = Array.isArray(req.body.items) ? req.body.items : [];
-    if (items.length === 0) throw new AppError('El carrito está vacío.', 400);
+    const crudos = req.body && req.body.items;
+    if (!Array.isArray(crudos) || crudos.length === 0) throw new AppError('El carrito está vacío.', 400);
+    if (crudos.some((item) => !item || typeof item !== 'object' || Array.isArray(item))) {
+      throw new AppError('Cada producto de la venta debe ser válido.', 400);
+    }
 
     const venta = await prisma.$transaction(async (tx) => {
-      const cantidades = new Map();
-      for (const item of items) {
-        if (!item.esRapido && item.productoId) {
-          cantidades.set(item.productoId, (cantidades.get(item.productoId) || 0) + Number(item.cantidad));
+      const cantidadesMillesimas = new Map();
+      const idsProductos = new Set();
+      const items = crudos.map((item) => {
+        const esRapido = item.esRapido === true;
+        const productoId = item.productoId == null ? null : String(item.productoId).trim();
+        if (esRapido && productoId) {
+          throw new AppError('Un producto rápido no puede estar ligado al inventario.', 400);
         }
+        if (!esRapido && !productoId) {
+          throw new AppError('Selecciona un producto válido del inventario o márcalo como producto rápido.', 400);
+        }
+
+        const nombre = esRapido && typeof item.nombre === 'string' ? item.nombre.trim() : '';
+        if (esRapido && !nombre) throw new AppError('Cada producto rápido debe tener un nombre o concepto.', 400);
+        const unidadMedida = esRapido ? VentasLogica.normalizarUnidadMedida(item.unidadMedida) : 'Metro';
+        const cantidadSolicitada = validarCantidad(item.cantidad, nombre || 'del inventario', unidadMedida);
+        const precioCentavos = validarPrecio(item.precioUnitario, nombre || 'del inventario');
+        const cantidadMillesimas = Math.round(cantidadSolicitada * 1000);
+        const subtotalCentavos = Math.round((precioCentavos * cantidadMillesimas) / 1000);
+        if (!Number.isSafeInteger(subtotalCentavos) || subtotalCentavos > MAX_PRECIO_CENTAVOS) {
+          throw new AppError(`El subtotal de "${nombre || 'del inventario'}" es demasiado grande.`, 400);
+        }
+
+        if (!esRapido) {
+          idsProductos.add(productoId);
+          cantidadesMillesimas.set(productoId, (cantidadesMillesimas.get(productoId) || 0) + cantidadMillesimas);
+        }
+
+        return {
+          productoId: esRapido ? null : productoId,
+          nombre,
+          unidadMedida: esRapido ? unidadMedida : null,
+          cantidad: cantidadMillesimas / 1000,
+          cantidadMillesimas,
+          precioUnitario: precioCentavos / 100,
+          subtotal: subtotalCentavos / 100,
+          subtotalCentavos,
+          esRapido,
+        };
+      });
+
+      const productos = idsProductos.size
+        ? await tx.producto.findMany({ where: { id: { in: Array.from(idsProductos) } } })
+        : [];
+      const productosPorId = new Map(productos.map((producto) => [producto.id, producto]));
+
+      for (const item of items) {
+        if (item.esRapido) continue;
+        const producto = productosPorId.get(item.productoId);
+        if (!producto || !producto.activo) {
+          throw new AppError('Uno de los productos ya no está disponible en el inventario.', 400, 'PRODUCTO_NO_DISPONIBLE');
+        }
+        item.nombre = producto.nombre;
+        item.unidadMedida = VentasLogica.normalizarUnidadMedida(producto.unidadMedida);
+        validarCantidad(item.cantidad, item.nombre, item.unidadMedida);
       }
 
-      for (const [productoId, cantidad] of cantidades) {
+      for (const [productoId, cantidadMillesimas] of cantidadesMillesimas) {
+        const cantidad = cantidadMillesimas / 1000;
         const resultado = await tx.producto.updateMany({
           where: { id: productoId, activo: true, stock: { gte: cantidad } },
           data: { stock: { decrement: cantidad } },
@@ -95,17 +169,23 @@ async function registrarVenta(req, res, next) {
         }
       }
 
+      const totalCentavos = items.reduce((sum, item) => sum + item.subtotalCentavos, 0);
+      if (!Number.isSafeInteger(totalCentavos) || totalCentavos > MAX_PRECIO_CENTAVOS) {
+        throw new AppError('El total de la venta es demasiado grande.', 400);
+      }
+
       const registro = await tx.venta.create({
         data: {
-          total: redondear(items.reduce((sum, item) => sum + Number(item.subtotal || 0), 0)),
+          total: totalCentavos / 100,
           items: {
             create: items.map((item) => ({
-              productoId: item.esRapido ? null : item.productoId,
+              productoId: item.productoId,
               nombre: item.nombre,
               cantidad: item.cantidad,
-              precioUnitario: redondear(Number(item.precioUnitario || 0)),
-              subtotal: redondear(Number(item.subtotal || 0)),
-              esRapido: !!item.esRapido,
+              unidadMedida: item.unidadMedida,
+              precioUnitario: item.precioUnitario,
+              subtotal: item.subtotal,
+              esRapido: item.esRapido,
             })),
           },
         },
@@ -141,6 +221,7 @@ async function actualizarVenta(req, res, next) {
       cantidad: it.cantidad,
       precioUnitario: it.precioUnitario,
       esRapido: !!it.esRapido,
+      unidadMedida: it.unidadMedida,
     }));
 
     let totalAnterior = 0;
@@ -161,7 +242,7 @@ async function actualizarVenta(req, res, next) {
       const productos = idsProductos.size
         ? await tx.producto.findMany({ where: { id: { in: Array.from(idsProductos) } } })
         : [];
-      const porId = new Map(productos.map((p) => [p.id, { ...p, precio: Number(p.precio) }]));
+      const porId = new Map(productos.map((p) => [p.id, { ...p, precio: Number(p.precio), stock: Number(p.stock) }]));
 
       const plan = planificarEdicion({
         original: venta,
@@ -202,6 +283,7 @@ async function actualizarVenta(req, res, next) {
               precioUnitario: it.precioUnitario,
               subtotal: it.subtotal,
               esRapido: it.esRapido,
+              unidadMedida: it.unidadMedida,
             })),
           },
         },

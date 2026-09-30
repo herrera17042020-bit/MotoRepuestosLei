@@ -371,7 +371,7 @@ const Security = (function () {
     campo.type = visible ? 'text' : 'password';
     boton.setAttribute('aria-pressed', visible ? 'true' : 'false');
     boton.setAttribute('aria-label', visible ? 'Ocultar contraseña' : 'Mostrar contraseña');
-    boton.textContent = visible ? '🙈' : '👁';
+    boton.textContent = visible ? 'Ocultar' : 'Mostrar';
   }
 
   function liberarPendiente(resultado) {

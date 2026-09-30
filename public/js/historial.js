@@ -235,8 +235,8 @@ const Historial = (function () {
       .map(
         (it) => `
       <div class="detalle-venta-item">
-        <span>${it.nombre} × ${it.cantidad} ${it.esRapido ? '<span class="etiqueta etiqueta-rapido-mini">rápido</span>' : ''}</span>
-        <span>${UI.formatoMoneda(it.subtotal)}</span>
+        <span>${UI.escapar(it.nombre)} — ${Number(it.cantidad).toLocaleString('es-NI', { maximumFractionDigits: 3 })} ${UI.escapar(VentasLogica.normalizarUnidadMedida(it.unidadMedida))}${it.esRapido ? ' <span class="etiqueta etiqueta-rapido-mini">rápido</span>' : ''}</span>
+        <span>${UI.formatoMoneda(it.precioUnitario)} / ${UI.escapar(VentasLogica.normalizarUnidadMedida(it.unidadMedida))} · ${UI.formatoMoneda(it.subtotal)}</span>
       </div>
     `
       )

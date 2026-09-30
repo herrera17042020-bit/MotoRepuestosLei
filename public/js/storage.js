@@ -198,9 +198,8 @@ const Storage = (function () {
     return `${prefijo}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
   }
 
-  // Los precios se manejan como cordobas enteros, sin centavos.
   function redondear(valor) {
-    return Math.round(Number(valor) || 0);
+    return Math.round((Number(valor) + Number.EPSILON) * 100) / 100 || 0;
   }
 
   function calcularEstado(stock) {
@@ -380,19 +379,22 @@ const Storage = (function () {
   // ---- API publica: PRODUCTOS ----------------------------------------
 
   function getProductos() {
-    return leer(CLAVES.PRODUCTOS, []);
+    return leer(CLAVES.PRODUCTOS, []).map((producto) => ({
+      ...producto,
+      unidadMedida: VentasLogica.normalizarUnidadMedida(producto.unidadMedida),
+    }));
   }
 
   function getProducto(id) {
     return getProductos().find((p) => p.id === id) || null;
   }
 
-  async function crearProducto({ nombre, categoria, precio, stock }) {
+  async function crearProducto({ nombre, categoria, precio, stock, unidadMedida = 'Unidad' }) {
     if (await detectarBackend()) {
       const creado = await requestJson(`${API_BASE}/productos`, {
         method: 'POST',
         auth: 'inventario',
-        body: JSON.stringify({ nombre, categoria, precio, stock }),
+        body: JSON.stringify({ nombre, categoria, precio, stock, unidadMedida }),
       });
       await sincronizarDesdeApi();
       return creado;
@@ -402,7 +404,13 @@ const Storage = (function () {
     const productos = getProductos();
     const nombreLimpio = (nombre || '').trim();
     const categoriaLimpia = (categoria || '').trim();
-    const stockNumerico = Math.max(0, Math.trunc(Number(stock) || 0));
+    const unidadNormalizada = VentasLogica.normalizarUnidadMedida(unidadMedida);
+    const stockNumerico = Number(stock) || 0;
+    if (stockNumerico < 0 || stockNumerico > 9999999999.999 ||
+        Math.abs(stockNumerico * 1000 - Math.round(stockNumerico * 1000)) > 0.000001 ||
+        (unidadNormalizada === 'Unidad' && !Number.isInteger(stockNumerico))) {
+      throw new Error('El stock no es válido para la unidad de medida seleccionada.');
+    }
     const precioNumerico = redondear(Number(precio) || 0);
 
     const productoExistente = productos.find((p) => {
@@ -411,8 +419,15 @@ const Storage = (function () {
     });
 
     if (productoExistente) {
-      productoExistente.stock += stockNumerico;
+      const stockNuevo = Math.round((productoExistente.stock + stockNumerico) * 1000) / 1000;
+      if (stockNuevo > 9999999999.999 ||
+          Math.abs(stockNuevo * 1000 - Math.round(stockNuevo * 1000)) > 0.000001 ||
+          (unidadNormalizada === 'Unidad' && !Number.isInteger(stockNuevo))) {
+        throw new Error('El stock acumulado no es válido para la unidad de medida seleccionada.');
+      }
+      productoExistente.stock = stockNuevo;
       productoExistente.precio = precioNumerico > 0 ? precioNumerico : productoExistente.precio;
+      productoExistente.unidadMedida = unidadNormalizada;
       productoExistente.estado = calcularEstado(productoExistente.stock);
       productoExistente.updatedAt = new Date().toISOString();
       escribir(CLAVES.PRODUCTOS, productos);
@@ -426,6 +441,7 @@ const Storage = (function () {
       categoria: categoriaLimpia,
       precio: precioNumerico,
       stock: stockNumerico,
+      unidadMedida: unidadNormalizada,
       estado: calcularEstado(stockNumerico),
       activo: true,
       createdAt: new Date().toISOString(),
@@ -456,7 +472,13 @@ const Storage = (function () {
     const actualizado = { ...productos[idx], ...cambios, updatedAt: new Date().toISOString() };
     if (typeof cambios.precio === 'number') actualizado.precio = redondear(cambios.precio);
     if (typeof cambios.stock === 'number') {
-      actualizado.stock = Math.max(0, Math.trunc(cambios.stock));
+      const unidad = VentasLogica.normalizarUnidadMedida(actualizado.unidadMedida);
+      if (cambios.stock < 0 || cambios.stock > 9999999999.999 ||
+          Math.abs(cambios.stock * 1000 - Math.round(cambios.stock * 1000)) > 0.000001 ||
+          (unidad === 'Unidad' && !Number.isInteger(cambios.stock))) {
+        throw new Error('El stock no es válido para la unidad de medida seleccionada.');
+      }
+      actualizado.stock = cambios.stock;
       actualizado.estado = calcularEstado(actualizado.stock);
     }
     productos[idx] = actualizado;
@@ -468,9 +490,11 @@ const Storage = (function () {
   async function agregarStock(id, cantidad) {
     const producto = getProducto(id);
     if (!producto) throw new Error('Producto no encontrado.');
-    const cantidadNumerica = Math.trunc(Number(cantidad));
-    if (!Number.isFinite(cantidadNumerica) || cantidadNumerica <= 0) {
-      throw new Error('La cantidad a agregar debe ser un numero positivo.');
+    const cantidadNumerica = Number(cantidad);
+    try {
+      VentasLogica.validarCantidad(cantidadNumerica, producto.nombre, producto.unidadMedida);
+    } catch (err) {
+      throw new Error(err.message);
     }
     return actualizarProducto(id, { stock: producto.stock + cantidadNumerica });
   }
@@ -547,37 +571,57 @@ const Storage = (function () {
     }
 
     const productos = getProductos();
-
-    for (const item of itemsCarrito) {
-      if (item.esRapido) continue;
-      const producto = productos.find((p) => p.id === item.productoId);
-      if (!producto) {
+    const itemsNormalizados = itemsCarrito.map((item) => {
+      const producto = item.esRapido ? null : productos.find((p) => p.id === item.productoId);
+      if (!item.esRapido && !producto) {
         throw new Error(`El producto "${item.nombre}" ya no existe en el inventario.`);
       }
-      if (producto.stock < item.cantidad) {
+      const unidadMedida = item.esRapido
+        ? VentasLogica.normalizarUnidadMedida(item.unidadMedida)
+        : VentasLogica.normalizarUnidadMedida(producto.unidadMedida);
+      const cantidad = VentasLogica.validarCantidad(item.cantidad, item.nombre, unidadMedida);
+      const precioUnitario = VentasLogica.validarPrecio(Number(item.precioUnitario), item.nombre);
+      const subtotal = redondear(precioUnitario * cantidad);
+      if (!item.esRapido && producto.stock < cantidad) {
         throw new Error(`No hay suficiente inventario disponible de "${producto.nombre}".`);
+      }
+      return { ...item, unidadMedida, cantidad, precioUnitario, subtotal };
+    });
+    const cantidadesPorProducto = new Map();
+    for (const item of itemsNormalizados) {
+      if (item.esRapido) continue;
+      cantidadesPorProducto.set(
+        item.productoId,
+        (cantidadesPorProducto.get(item.productoId) || 0) + Math.round(item.cantidad * 1000)
+      );
+    }
+    for (const [productoId, cantidadMilésimas] of cantidadesPorProducto) {
+      const producto = productos.find((p) => p.id === productoId);
+      if (!producto || producto.stock * 1000 < cantidadMilésimas) {
+        throw new Error(`No hay suficiente inventario disponible de "${producto ? producto.nombre : 'este producto'}".`);
       }
     }
 
     const productosActualizados = productos.map((p) => ({ ...p }));
-    for (const item of itemsCarrito) {
+    for (const item of itemsNormalizados) {
       if (item.esRapido) continue;
       const producto = productosActualizados.find((p) => p.id === item.productoId);
-      producto.stock -= item.cantidad;
+      producto.stock = Math.round((producto.stock - item.cantidad) * 1000) / 1000;
       producto.estado = calcularEstado(producto.stock);
       producto.updatedAt = new Date().toISOString();
     }
     escribir(CLAVES.PRODUCTOS, productosActualizados);
 
     const folio = siguienteFolio();
-    const total = redondear(itemsCarrito.reduce((s, it) => s + it.subtotal, 0));
+    const total = redondear(itemsNormalizados.reduce((s, it) => s + it.subtotal, 0));
     const venta = {
       id: folio,
       fecha: new Date().toISOString(),
-      items: itemsCarrito.map((it) => ({
+      items: itemsNormalizados.map((it) => ({
         productoId: it.esRapido ? null : it.productoId,
         nombre: it.nombre,
         cantidad: it.cantidad,
+        unidadMedida: it.unidadMedida,
         precioUnitario: it.precioUnitario,
         subtotal: it.subtotal,
         esRapido: !!it.esRapido,
@@ -639,7 +683,7 @@ const Storage = (function () {
     for (const ajuste of ajustes) {
       const producto = productos.find((p) => p.id === ajuste.productoId);
       if (!producto) continue;
-      const nuevoStock = producto.stock + ajuste.delta;
+      const nuevoStock = Math.round((producto.stock + ajuste.delta) * 1000) / 1000;
       if (nuevoStock < 0) throw new Error(`No hay suficiente inventario disponible de "${producto.nombre}".`);
       producto.stock = nuevoStock;
       producto.estado = calcularEstado(nuevoStock);
@@ -664,6 +708,7 @@ const Storage = (function () {
           productoId: it.esRapido ? null : it.productoId,
           nombre: it.nombre,
           cantidad: it.cantidad,
+          unidadMedida: it.unidadMedida,
           precioUnitario: it.precioUnitario,
           esRapido: !!it.esRapido,
         }));

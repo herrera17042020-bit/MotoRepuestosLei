@@ -17,6 +17,24 @@ const Inventario = (function () {
       .replace(/[\u0300-\u036f]/g, '');
   }
 
+  function unidadPermiteDecimal(unidadMedida) {
+    return VentasLogica.unidadPermiteDecimal(unidadMedida);
+  }
+
+  function actualizarPasoCantidad(input, unidadMedida) {
+    input.step = unidadPermiteDecimal(unidadMedida) ? '0.001' : '1';
+    input.min = input.id === 'producto-stock' ? '0' : unidadPermiteDecimal(unidadMedida) ? '0.001' : '1';
+  }
+
+  function actualizarEtiquetasUnidad(unidadMedida) {
+    document.getElementById('producto-stock-etiqueta').textContent = `Cantidad inicial (${unidadMedida})`;
+    document.getElementById('producto-precio-etiqueta').textContent = `Precio (C$ / ${unidadMedida})`;
+  }
+
+  function formatoCantidad(valor) {
+    return Number(valor).toLocaleString('es-NI', { maximumFractionDigits: 3 });
+  }
+
   // Pantalla mostrada mientras el inventario NO esta autorizado: no contiene ningun dato.
   function renderizarBloqueado() {
     const cont = document.getElementById('pantalla-inventario');
@@ -183,11 +201,11 @@ const Inventario = (function () {
               <span class="fila-inventario-nombre">${p.nombre}</span>
               <span class="fila-inventario-categoria">${p.categoria}</span>
             </div>
-            <span class="fila-inventario-precio">${UI.formatoMoneda(p.precio)}</span>
+            <span class="fila-inventario-precio">${UI.formatoMoneda(p.precio)} / ${UI.escapar(VentasLogica.normalizarUnidadMedida(p.unidadMedida))}</span>
           </div>
           <div class="fila-inventario-secundaria">
             <span class="etiqueta ${estado.clase}">${estado.texto}</span>
-            <span class="fila-inventario-stock">Stock: ${p.stock} unidades</span>
+            <span class="fila-inventario-stock">Stock: ${formatoCantidad(p.stock)} ${UI.escapar(VentasLogica.normalizarUnidadMedida(p.unidadMedida))}</span>
           </div>
           <div class="fila-inventario-acciones">
             <button class="btn-secundario" data-editar="${p.id}">Editar</button>
@@ -231,6 +249,8 @@ const Inventario = (function () {
     document.getElementById('titulo-modal-producto').textContent = 'Nuevo producto';
     document.getElementById('form-producto').reset();
     UI.llenarSelectCategorias(document.getElementById('producto-categoria'), '');
+    actualizarPasoCantidad(document.getElementById('producto-stock'), 'Unidad');
+    actualizarEtiquetasUnidad('Unidad');
     UI.abrirModal('modal-producto');
   }
 
@@ -243,6 +263,10 @@ const Inventario = (function () {
     document.getElementById('producto-nombre').value = producto.nombre;
     document.getElementById('producto-precio').value = producto.precio;
     document.getElementById('producto-stock').value = producto.stock;
+    const unidadMedida = VentasLogica.normalizarUnidadMedida(producto.unidadMedida);
+    document.getElementById('producto-unidad-medida').value = unidadMedida;
+    actualizarPasoCantidad(document.getElementById('producto-stock'), unidadMedida);
+    actualizarEtiquetasUnidad(unidadMedida);
     UI.llenarSelectCategorias(document.getElementById('producto-categoria'), producto.categoria);
     UI.abrirModal('modal-producto');
   }
@@ -253,6 +277,7 @@ const Inventario = (function () {
     const categoria = document.getElementById('producto-categoria').value;
     const precio = Math.round(Number(document.getElementById('producto-precio').value));
     const stock = Number(document.getElementById('producto-stock').value);
+    const unidadMedida = document.getElementById('producto-unidad-medida').value;
 
     if (!nombre) {
       UI.mostrarToast('Escribe el nombre del producto.', 'error');
@@ -266,17 +291,25 @@ const Inventario = (function () {
       UI.mostrarToast('El precio debe ser un número entero mayor a cero.', 'error');
       return;
     }
-    if (!Number.isInteger(stock) || stock < 0) {
-      UI.mostrarToast('El stock debe ser 0 o un número entero positivo.', 'error');
+    try {
+      if (stock < 0 || !Number.isFinite(stock) ||
+          Math.abs(stock * 1000 - Math.round(stock * 1000)) > 0.000001 ||
+          (!VentasLogica.unidadPermiteDecimal(unidadMedida) && !Number.isInteger(stock))) {
+        throw new Error(unidadMedida === 'Unidad'
+          ? 'El stock de productos por unidad debe ser entero.'
+          : 'El stock puede tener hasta tres decimales.');
+      }
+    } catch (err) {
+      UI.mostrarToast(err.message, 'error');
       return;
     }
 
     try {
       if (idProductoEnEdicion) {
-        await Storage.actualizarProducto(idProductoEnEdicion, { nombre, categoria, precio, stock });
+        await Storage.actualizarProducto(idProductoEnEdicion, { nombre, categoria, precio, stock, unidadMedida });
         UI.mostrarToast('Producto actualizado', 'exito');
       } else {
-        await Storage.crearProducto({ nombre, categoria, precio, stock });
+        await Storage.crearProducto({ nombre, categoria, precio, stock, unidadMedida });
         UI.mostrarToast('Producto agregado al inventario', 'exito');
       }
     } catch (err) {
@@ -297,7 +330,10 @@ const Inventario = (function () {
 
     document.getElementById('form-agregar-stock').reset();
     document.getElementById('agregar-stock-nombre').textContent = producto.nombre;
-    document.getElementById('agregar-stock-actual').textContent = `Stock actual: ${producto.stock} unidades`;
+    const unidadMedida = VentasLogica.normalizarUnidadMedida(producto.unidadMedida);
+    document.getElementById('agregar-stock-actual').textContent = `Stock actual: ${formatoCantidad(producto.stock)} ${unidadMedida}`;
+    actualizarPasoCantidad(document.getElementById('agregar-stock-cantidad'), unidadMedida);
+    document.getElementById('agregar-stock-etiqueta').textContent = `Cantidad a agregar (${unidadMedida})`;
     UI.abrirModal('modal-agregar-stock');
   }
 
@@ -306,15 +342,18 @@ const Inventario = (function () {
     if (!idProductoParaStock) return;
 
     const cantidad = Number(document.getElementById('agregar-stock-cantidad').value);
-    if (!Number.isInteger(cantidad) || cantidad <= 0) {
-      UI.mostrarToast('Ingresa una cantidad entera mayor a cero.', 'error');
+    const productoActual = Storage.getProducto(idProductoParaStock);
+    try {
+      VentasLogica.validarCantidad(cantidad, productoActual.nombre, productoActual.unidadMedida);
+    } catch (err) {
+      UI.mostrarToast(err.message, 'error');
       return;
     }
 
     try {
       const producto = await Storage.agregarStock(idProductoParaStock, cantidad);
       UI.cerrarModal('modal-agregar-stock');
-      UI.mostrarToast(`Nuevo stock de "${producto.nombre}": ${producto.stock} unidades`, 'exito');
+      UI.mostrarToast(`Nuevo stock de "${producto.nombre}": ${formatoCantidad(producto.stock)} ${producto.unidadMedida}`, 'exito');
       renderizarLista();
     } catch (err) {
       UI.mostrarToast(err.message, 'error');
@@ -325,6 +364,10 @@ const Inventario = (function () {
   function inicializarEventosGlobales() {
     document.getElementById('form-producto').addEventListener('submit', manejarSubmitProducto);
     document.getElementById('form-agregar-stock').addEventListener('submit', manejarSubmitAgregarStock);
+    document.getElementById('producto-unidad-medida').addEventListener('change', (evento) => {
+      actualizarPasoCantidad(document.getElementById('producto-stock'), evento.target.value);
+      actualizarEtiquetasUnidad(evento.target.value);
+    });
   }
 
   return { renderizar, renderizarBloqueado, inicializarEventosGlobales };

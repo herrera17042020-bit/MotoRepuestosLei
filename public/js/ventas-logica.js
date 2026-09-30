@@ -20,6 +20,7 @@
   }
 })(typeof self !== 'undefined' ? self : this, function () {
   const MAX_CANTIDAD = 100000;
+  const UNIDADES_MEDIDA = ['Unidad', 'Metro', 'Yarda', 'Pie', 'Kilogramo', 'Litro'];
 
   class ErrorVenta extends Error {
     constructor(mensaje, status = 400, codigo = 'VENTA_INVALIDA') {
@@ -30,9 +31,9 @@
     }
   }
 
-  // Los precios de la app son cordobas enteros (sin centavos).
+  // Normaliza importes a la precision soportada por Decimal(10, 2).
   function redondear(valor) {
-    return Math.round(Number(valor) || 0);
+    return Math.round((Number(valor) + Number.EPSILON) * 100) / 100 || 0;
   }
 
   // ---- "ventas del dia" ------------------------------------------------
@@ -79,15 +80,28 @@
     const mapa = new Map();
     for (const item of items || []) {
       if (!esLineaRegistrada(item)) continue;
-      mapa.set(item.productoId, (mapa.get(item.productoId) || 0) + Number(item.cantidad || 0));
+      const milésimas = Math.round(Number(item.cantidad || 0) * 1000);
+      mapa.set(item.productoId, (mapa.get(item.productoId) || 0) + milésimas);
     }
     return mapa;
   }
 
-  function validarCantidad(valor, nombre) {
+  function normalizarUnidadMedida(valor) {
+    if (valor === undefined || valor === null || valor === '') return 'Unidad';
+    const unidad = UNIDADES_MEDIDA.find((opcion) => opcion.toLowerCase() === String(valor).trim().toLowerCase());
+    if (!unidad) throw new ErrorVenta('La unidad de medida seleccionada no es válida.');
+    return unidad;
+  }
+
+  function unidadPermiteDecimal(unidad) {
+    return normalizarUnidadMedida(unidad) !== 'Unidad';
+  }
+
+  function validarCantidad(valor, nombre, unidad = 'Unidad') {
     const cantidad = Number(valor);
-    if (!Number.isInteger(cantidad)) {
-      throw new ErrorVenta(`La cantidad de "${nombre}" debe ser un número entero.`);
+    const medida = normalizarUnidadMedida(unidad);
+    if (!Number.isFinite(cantidad)) {
+      throw new ErrorVenta(`La cantidad de "${nombre}" debe ser numérica.`);
     }
     if (cantidad <= 0) {
       throw new ErrorVenta(`La cantidad de "${nombre}" debe ser mayor a cero.`);
@@ -95,7 +109,25 @@
     if (cantidad > MAX_CANTIDAD) {
       throw new ErrorVenta(`La cantidad de "${nombre}" es demasiado grande.`);
     }
-    return cantidad;
+    if (medida === 'Unidad' && !Number.isInteger(cantidad)) {
+      throw new ErrorVenta(`La cantidad de "${nombre}" debe ser un número entero.`);
+    }
+    const milésimas = Math.round(cantidad * 1000);
+    if (Math.abs(cantidad * 1000 - milésimas) > 0.000001) {
+      throw new ErrorVenta(`La cantidad de "${nombre}" puede tener hasta tres decimales.`);
+    }
+    return milésimas / 1000;
+  }
+
+  function validarPrecio(valor, nombre) {
+    if (typeof valor !== 'number' || !Number.isFinite(valor) || valor <= 0) {
+      throw new ErrorVenta(`El precio de "${nombre}" debe ser mayor a cero.`);
+    }
+    const centavos = Math.round((valor + Number.EPSILON) * 100);
+    if (centavos > 9999999999 || Math.abs(valor * 100 - centavos) > 0.000001) {
+      throw new ErrorVenta(`El precio de "${nombre}" debe tener hasta dos decimales y no ser demasiado grande.`);
+    }
+    return centavos / 100;
   }
 
   // ---- plan de modificacion ----------------------------------------------
@@ -129,7 +161,11 @@
     const preciosOriginales = new Map();
     for (const it of original.items) {
       if (esLineaRegistrada(it) && !preciosOriginales.has(it.productoId)) {
-        preciosOriginales.set(it.productoId, { precio: redondear(it.precioUnitario), nombre: it.nombre });
+        preciosOriginales.set(it.productoId, {
+          precio: redondear(it.precioUnitario),
+          nombre: it.nombre,
+          unidadMedida: normalizarUnidadMedida(it.unidadMedida),
+        });
       }
     }
 
@@ -138,16 +174,15 @@
       const esRapido = !!(crudo && crudo.esRapido) || !(crudo && crudo.productoId);
 
       if (esRapido) {
-        const nombre = String((crudo && crudo.nombre) || '').trim();
+        const nombre = typeof (crudo && crudo.nombre) === 'string' ? crudo.nombre.trim() : '';
         if (!nombre) throw new ErrorVenta('Cada producto de la venta debe tener nombre.');
-        const cantidad = validarCantidad(crudo.cantidad, nombre);
-        const precio = redondear(crudo.precioUnitario);
-        if (!Number.isFinite(precio) || precio <= 0) {
-          throw new ErrorVenta(`El precio de "${nombre}" debe ser mayor a cero.`);
-        }
+        const unidadMedida = normalizarUnidadMedida(crudo.unidadMedida);
+        const cantidad = validarCantidad(crudo.cantidad, nombre, unidadMedida);
+        const precio = validarPrecio(crudo.precioUnitario, nombre);
         items.push({
           productoId: null,
           nombre,
+          unidadMedida,
           cantidad,
           precioUnitario: precio,
           subtotal: redondear(precio * cantidad),
@@ -165,11 +200,13 @@
 
       const nombre = previo ? previo.nombre : producto.nombre;
       const precio = previo ? previo.precio : redondear(producto.precio);
-      const cantidad = validarCantidad(crudo.cantidad, nombre);
+      const unidadMedida = normalizarUnidadMedida(previo ? previo.unidadMedida : producto.unidadMedida);
+      const cantidad = validarCantidad(crudo.cantidad, nombre, unidadMedida);
 
       items.push({
         productoId,
         nombre,
+        unidadMedida,
         cantidad,
         precioUnitario: precio,
         subtotal: redondear(precio * cantidad),
@@ -183,8 +220,9 @@
     const ajustesStock = [];
 
     for (const productoId of new Set([...antes.keys(), ...despues.keys()])) {
-      const diferencia = (despues.get(productoId) || 0) - (antes.get(productoId) || 0);
-      if (diferencia === 0) continue;
+      const diferenciaMillesimas = (despues.get(productoId) || 0) - (antes.get(productoId) || 0);
+      if (diferenciaMillesimas === 0) continue;
+      const diferencia = diferenciaMillesimas / 1000;
 
       const producto = obtenerProducto ? obtenerProducto(productoId) : null;
       const nombre = (preciosOriginales.get(productoId) || {}).nombre || (producto && producto.nombre) || 'producto';
@@ -222,7 +260,7 @@
     }
     const ajustesStock = [];
     for (const [productoId, cantidad] of sumarPorProducto(original.items)) {
-      if (cantidad > 0) ajustesStock.push({ productoId, delta: cantidad });
+      if (cantidad > 0) ajustesStock.push({ productoId, delta: cantidad / 1000 });
     }
     return { ajustesStock };
   }
@@ -231,6 +269,10 @@
     ErrorVenta,
     claveDia,
     esDelDiaActual,
+    normalizarUnidadMedida,
+    unidadPermiteDecimal,
+    validarCantidad,
+    validarPrecio,
     planificarEdicion,
     planificarEliminacion,
   };

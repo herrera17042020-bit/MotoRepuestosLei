@@ -12,7 +12,7 @@ const UI = (function () {
 
   function formatoMoneda(valor) {
     const numero = Number(valor) || 0;
-    return `C$${Math.round(numero).toLocaleString('es-NI')}`;
+    return `C$${numero.toLocaleString('es-NI', { maximumFractionDigits: 2 })}`;
   }
 
   function formatoFechaRelativa(fechaISO) {
@@ -60,6 +60,10 @@ const UI = (function () {
     if (!contenedorToasts) inicializarToasts();
     if (!contenedorToasts) return;
 
+    // Mantener un solo aviso visible evita que se cubra la pantalla al
+    // agregar varios productos rápidamente.
+    contenedorToasts.querySelectorAll('.toast').forEach((aviso) => aviso.remove());
+
     const iconos = { exito: '✓', error: '✕', aviso: '⚠' , info: 'ℹ' };
     const toast = document.createElement('div');
     toast.className = `toast toast-${tipo}`;
@@ -69,10 +73,11 @@ const UI = (function () {
     contenedorToasts.appendChild(toast);
     requestAnimationFrame(() => toast.classList.add('toast-visible'));
 
+    const duracion = tipo === 'exito' ? 1600 : 2600;
     setTimeout(() => {
       toast.classList.remove('toast-visible');
       setTimeout(() => toast.remove(), 250);
-    }, 3000);
+    }, duracion);
   }
 
   // ---- modales -----------------------------------------------------------

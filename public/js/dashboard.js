@@ -91,7 +91,7 @@ const Dashboard = (function () {
                     (p) => `
                 <div class="fila-poco-stock">
                   <span>${p.nombre}</span>
-                  <span class="etiqueta etiqueta-aviso">${p.stock} unidad${p.stock === 1 ? '' : 'es'}</span>
+                  <span class="etiqueta etiqueta-aviso">${Number(p.stock).toLocaleString('es-NI', { maximumFractionDigits: 3 })} ${UI.escapar(VentasLogica.normalizarUnidadMedida(p.unidadMedida))}</span>
                 </div>
               `
                   )

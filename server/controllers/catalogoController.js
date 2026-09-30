@@ -1,5 +1,22 @@
 const prisma = require('../services/prisma');
 const { AppError } = require('../middlewares/errorHandler');
+const VentasLogica = require('../../public/js/ventas-logica');
+
+function normalizarStock(valor, unidadMedida, permitirCero = true) {
+  const stock = valor === undefined || valor === null || valor === '' ? 0 : Number(valor);
+  const unidad = VentasLogica.normalizarUnidadMedida(unidadMedida);
+  if (!Number.isFinite(stock) || stock < 0 || (!permitirCero && stock === 0) || stock > 9999999999.999) {
+    throw new AppError('El stock debe ser un número no negativo y válido.', 400);
+  }
+  if (unidad === 'Unidad' && !Number.isInteger(stock)) {
+    throw new AppError('El stock de productos por unidad debe ser un número entero.', 400);
+  }
+  const milésimas = Math.round(stock * 1000);
+  if (Math.abs(stock * 1000 - milésimas) > 0.000001) {
+    throw new AppError('El stock puede tener hasta tres decimales.', 400);
+  }
+  return milésimas / 1000;
+}
 
 function normalizarDecimal(valor) {
   return Math.round(Number(valor) || 0);
@@ -64,7 +81,8 @@ async function getProductos(req, res, next) {
       nombre: producto.nombre,
       categoria: producto.categoria.nombre,
       precio: normalizarDecimal(producto.precio),
-      stock: producto.stock,
+      stock: Number(producto.stock),
+      unidadMedida: VentasLogica.normalizarUnidadMedida(producto.unidadMedida),
       estado: producto.stock <= 0 ? 'agotado' : producto.stock <= 10 ? 'poco_stock' : 'disponible',
       activo: producto.activo,
       createdAt: producto.createdAt,
@@ -91,7 +109,8 @@ async function getProductoPorId(req, res, next) {
       nombre: producto.nombre,
       categoria: producto.categoria.nombre,
       precio: normalizarDecimal(producto.precio),
-      stock: producto.stock,
+      stock: Number(producto.stock),
+      unidadMedida: VentasLogica.normalizarUnidadMedida(producto.unidadMedida),
       estado: producto.stock <= 0 ? 'agotado' : producto.stock <= 10 ? 'poco_stock' : 'disponible',
     });
   } catch (err) {
@@ -105,7 +124,9 @@ async function crearProducto(req, res, next) {
     if (!nombre || !categoria) throw new AppError('Nombre y categoría son obligatorios.', 400);
 
     const nombreLimpio = nombre.trim();
-    const stockNum = Math.max(0, Number(stock) || 0);
+    const unidadSolicitada = req.body.unidadMedida === undefined ? null : VentasLogica.normalizarUnidadMedida(req.body.unidadMedida);
+    const unidadNueva = unidadSolicitada || 'Unidad';
+    const stockNum = normalizarStock(stock, unidadNueva);
     const precioNum = Math.max(0, normalizarDecimal(precio));
 
     let categoriaDb = await prisma.categoria.findFirst({ where: { nombre: categoria } });
@@ -125,12 +146,14 @@ async function crearProducto(req, res, next) {
     });
 
     if (productoExistente) {
-      const stockNuevo = productoExistente.stock + (Number.isInteger(stockNum) ? stockNum : Math.round(stockNum));
+      const unidadMedida = unidadSolicitada || VentasLogica.normalizarUnidadMedida(productoExistente.unidadMedida);
+      const stockNuevo = normalizarStock(Number(productoExistente.stock) + stockNum, unidadMedida);
       const productoActualizado = await prisma.producto.update({
         where: { id: productoExistente.id },
         data: {
           stock: stockNuevo,
           precio: precioNum,
+          unidadMedida,
         },
         include: { categoria: true },
       });
@@ -140,7 +163,8 @@ async function crearProducto(req, res, next) {
         nombre: productoActualizado.nombre,
         categoria: productoActualizado.categoria.nombre,
         precio: normalizarDecimal(productoActualizado.precio),
-        stock: productoActualizado.stock,
+        stock: Number(productoActualizado.stock),
+        unidadMedida: VentasLogica.normalizarUnidadMedida(productoActualizado.unidadMedida),
         merged: true,
       });
     }
@@ -150,7 +174,8 @@ async function crearProducto(req, res, next) {
         nombre: nombreLimpio,
         categoriaId: categoriaDb.id,
         precio: precioNum,
-        stock: Number.isInteger(stockNum) ? stockNum : Math.round(stockNum),
+        stock: stockNum,
+        unidadMedida: unidadNueva,
       },
       include: { categoria: true },
     });
@@ -160,7 +185,8 @@ async function crearProducto(req, res, next) {
       nombre: producto.nombre,
       categoria: producto.categoria.nombre,
       precio: normalizarDecimal(producto.precio),
-      stock: producto.stock,
+      stock: Number(producto.stock),
+      unidadMedida: VentasLogica.normalizarUnidadMedida(producto.unidadMedida),
       merged: false,
     });
   } catch (err) {
@@ -178,7 +204,11 @@ async function actualizarProducto(req, res, next) {
     const data = {};
     if (nombre) data.nombre = nombre.trim();
     if (precio !== undefined) data.precio = normalizarDecimal(precio);
-    if (stock !== undefined) data.stock = Math.max(0, Number(stock) || 0);
+    const unidadMedida = req.body.unidadMedida === undefined
+      ? VentasLogica.normalizarUnidadMedida(productoActual.unidadMedida)
+      : VentasLogica.normalizarUnidadMedida(req.body.unidadMedida);
+    if (req.body.unidadMedida !== undefined) data.unidadMedida = unidadMedida;
+    if (stock !== undefined) data.stock = normalizarStock(stock, unidadMedida);
 
     if (categoria) {
       const categoriaDb = await prisma.categoria.findFirst({ where: { nombre: categoria } });
@@ -197,7 +227,8 @@ async function actualizarProducto(req, res, next) {
       nombre: producto.nombre,
       categoria: producto.categoria.nombre,
       precio: normalizarDecimal(producto.precio),
-      stock: producto.stock,
+      stock: Number(producto.stock),
+      unidadMedida: VentasLogica.normalizarUnidadMedida(producto.unidadMedida),
     });
   } catch (err) {
     next(err);

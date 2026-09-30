@@ -11,6 +11,28 @@ const Ventas = (function () {
   let indiceRapidoAGuardar = null; // indice del item del carrito que se esta convirtiendo en producto de inventario
   let ventaReciente = null;
   let productosRapidosPendientes = [];
+  let guardandoVenta = false;
+
+  const MAX_PRECIO = 99999999.99;
+
+  function redondearDinero(valor) {
+    return Math.round((Number(valor) + Number.EPSILON) * 100) / 100;
+  }
+
+  function precioValido(valor) {
+    if (valor === '' || valor === null || valor === undefined) return false;
+    const precio = Number(valor);
+    return Number.isFinite(precio) && precio > 0 && precio <= MAX_PRECIO &&
+      Math.abs(precio * 100 - Math.round(precio * 100)) < 0.000001;
+  }
+
+  function unidadDe(item) {
+    return VentasLogica.normalizarUnidadMedida(item.unidadMedida);
+  }
+
+  function formatoCantidad(valor) {
+    return Number(valor).toLocaleString('es-NI', { maximumFractionDigits: 3 });
+  }
 
   function normalizar(texto) {
     return texto
@@ -89,14 +111,36 @@ const Ventas = (function () {
     document.getElementById('btn-abrir-producto-rapido').addEventListener('click', abrirModalProductoRapido);
     document.getElementById('btn-vaciar-carrito').addEventListener('click', confirmarVaciarCarrito);
     document.getElementById('btn-confirmar-venta').addEventListener('click', abrirConfirmacionVenta);
-    document.getElementById('carrito-peek').addEventListener('click', () => {
+    document.getElementById('carrito-peek').addEventListener('click', (evento) => {
       if (arrastreCarritoActivo) return;
-      document.getElementById('panel-carrito').classList.toggle('carrito-expandido');
+      const panel = document.getElementById('panel-carrito');
+      const estaExpandido = panel.classList.contains('carrito-expandido');
+      const tocoFlecha = evento.target.closest('.carrito-peek-flecha');
+      if (estaExpandido && !tocoFlecha) return;
+      if (window.innerWidth < 700) centrarCarritoEnMovil(panel);
+      panel.classList.toggle('carrito-expandido');
     });
+    document.removeEventListener('click', minimizarCarritoFuera);
+    document.addEventListener('click', minimizarCarritoFuera);
     inicializarCarritoMovible();
   }
 
   let arrastreCarritoActivo = false;
+
+  function centrarCarritoEnMovil(panel) {
+    panel.style.left = '';
+    panel.style.top = '';
+    panel.style.right = '';
+    panel.style.bottom = '';
+    panel.style.transform = '';
+  }
+
+  function minimizarCarritoFuera(evento) {
+    const panel = document.getElementById('panel-carrito');
+    if (!panel || !panel.classList.contains('carrito-expandido')) return;
+    if (evento.target instanceof Element && evento.target.closest('[data-agregar], #modal-producto-rapido')) return;
+    if (!panel.contains(evento.target)) panel.classList.remove('carrito-expandido');
+  }
 
   function inicializarCarritoMovible() {
     const panel = document.getElementById('panel-carrito');
@@ -109,6 +153,9 @@ const Ventas = (function () {
 
     asa.addEventListener('pointerdown', (evento) => {
       if (evento.button !== 0 && evento.pointerType !== 'touch') return;
+      if (window.innerWidth < 700 && panel.classList.contains('carrito-expandido')) {
+        panel.style.transform = 'none';
+      }
       const rect = panel.getBoundingClientRect();
       punteroInicial = { x: evento.clientX, y: evento.clientY };
       posicionInicial = { x: rect.left, y: rect.top };
@@ -198,8 +245,8 @@ const Ventas = (function () {
           ${agotado ? '<span class="tarjeta-producto-badge tarjeta-producto-badge-agotado">Agotado</span>' : ''}
           ${carrito.some((item) => item.productoId === p.id) ? `<span class="tarjeta-producto-badge tarjeta-producto-badge-carrito">En carrito: ${carrito.find((item) => item.productoId === p.id).cantidad}</span>` : ''}
           <span class="tarjeta-producto-nombre">${p.nombre}</span>
-          <span class="tarjeta-producto-precio">${UI.formatoMoneda(p.precio)}</span>
-          <span class="tarjeta-producto-stock">Stock: ${p.stock}</span>
+          <span class="tarjeta-producto-precio">${UI.formatoMoneda(p.precio)} / ${UI.escapar(VentasLogica.normalizarUnidadMedida(p.unidadMedida))}</span>
+          <span class="tarjeta-producto-stock">Stock: ${formatoCantidad(p.stock)} ${UI.escapar(VentasLogica.normalizarUnidadMedida(p.unidadMedida))}</span>
           <button class="tarjeta-producto-boton" data-agregar="${p.id}" ${agotado ? 'disabled' : ''}>+</button>
         </div>
       `;
@@ -218,7 +265,14 @@ const Ventas = (function () {
   }
 
   function recalcularSubtotal(item) {
-    item.subtotal = Storage.redondear(item.precioUnitario * item.cantidad);
+    try {
+      item.cantidad = VentasLogica.validarCantidad(item.cantidad, item.nombre, unidadDe(item));
+      item.subtotal = precioValido(item.precioUnitario)
+        ? redondearDinero(Number(item.precioUnitario) * item.cantidad)
+        : 0;
+    } catch (err) {
+      item.subtotal = 0;
+    }
   }
 
   function agregarProductoRegistrado(productoId) {
@@ -226,22 +280,28 @@ const Ventas = (function () {
     if (!producto) return;
 
     const existente = carrito.find((i) => i.productoId === productoId);
-    const cantidadActual = existente ? existente.cantidad : 0;
+    const cantidadActual = existente ? Number(existente.cantidad) || 0 : 0;
 
-    if (cantidadActual + 1 > producto.stock) {
+    const unidadMedida = VentasLogica.normalizarUnidadMedida(producto.unidadMedida);
+    const cantidadInicial = existente
+      ? (unidadMedida === 'Unidad' ? 1 : 0.1)
+      : (unidadMedida !== 'Unidad' && producto.stock < 1 ? producto.stock : 1);
+    if (cantidadActual + cantidadInicial > producto.stock) {
       UI.mostrarToast(`No hay suficiente inventario disponible de "${producto.nombre}".`, 'error');
       return;
     }
 
     if (existente) {
-      existente.cantidad += 1;
+      existente.cantidad = cantidadActual + cantidadInicial;
       recalcularSubtotal(existente);
     } else {
       carrito.push({
         productoId: producto.id,
         nombre: producto.nombre,
+        unidadMedida,
         precioUnitario: producto.precio,
-        cantidad: 1,
+        precioLista: producto.precio,
+        cantidad: cantidadInicial,
         subtotal: producto.precio,
         esRapido: false,
       });
@@ -265,13 +325,17 @@ const Ventas = (function () {
     if (!item.esRapido) {
       const producto = Storage.getProducto(item.productoId);
       const stockDisponible = producto ? producto.stock : 0;
-      if (delta > 0 && item.cantidad + delta > stockDisponible) {
+      const unidadMedida = unidadDe(item);
+      const incremento = unidadMedida === 'Unidad' ? delta : delta * 0.1;
+      if (delta > 0 && item.cantidad + incremento > stockDisponible) {
         UI.mostrarToast(`No hay suficiente inventario disponible de "${item.nombre}".`, 'error');
         return;
       }
     }
 
-    item.cantidad += delta;
+    const unidadMedida = unidadDe(item);
+    item.cantidad = (Number(item.cantidad) || 0) + (unidadMedida === 'Unidad' ? delta : delta * 0.1);
+    item.cantidad = Math.round(item.cantidad * 1000) / 1000;
     if (item.cantidad <= 0) {
       carrito.splice(indice, 1);
     } else {
@@ -301,14 +365,18 @@ const Ventas = (function () {
 
   function renderizarCarrito() {
     const contItems = document.getElementById('carrito-items');
-    const total = Storage.redondear(carrito.reduce((s, i) => s + i.subtotal, 0));
-    const cantidadTotal = carrito.reduce((s, i) => s + i.cantidad, 0);
+    carrito.forEach((item) => {
+      if (!item.esRapido && item.precioLista === undefined) {
+        const producto = Storage.getProducto(item.productoId);
+        item.precioLista = producto ? producto.precio : item.precioUnitario;
+      }
+      recalcularSubtotal(item);
+    });
+    const cantidadTotal = carrito.length;
 
     document.getElementById('carrito-peek-cantidad').textContent = `${cantidadTotal} producto${cantidadTotal === 1 ? '' : 's'}`;
     document.getElementById('carrito-badge').textContent = cantidadTotal > 99 ? '99+' : cantidadTotal;
-    document.getElementById('carrito-peek-total').textContent = UI.formatoMoneda(total);
-    document.getElementById('carrito-total').textContent = UI.formatoMoneda(total);
-    document.getElementById('btn-confirmar-venta').disabled = carrito.length === 0;
+    actualizarTotalesCarrito();
     renderizarProductos();
 
     if (carrito.length === 0) {
@@ -321,17 +389,24 @@ const Ventas = (function () {
         (item, indice) => `
       <div class="item-carrito">
         <div class="item-carrito-info">
-          <span class="item-carrito-nombre">${item.nombre}</span>
+          <span class="item-carrito-nombre">${UI.escapar(item.nombre)}</span>
           ${item.esRapido ? '<span class="etiqueta etiqueta-rapido">Producto rápido</span>' : ''}
         </div>
         <div class="item-carrito-controles">
-          <button class="btn-cantidad" data-cantidad="${indice}" data-delta="-1">−</button>
-          <span class="item-carrito-cantidad">${item.cantidad}</span>
-          <button class="btn-cantidad" data-cantidad="${indice}" data-delta="1">+</button>
+          <button class="btn-cantidad" data-cantidad="${indice}" data-delta="-1" aria-label="Disminuir cantidad">−</button>
+          <label class="item-carrito-cantidad-etiqueta">
+            <span>Cantidad (${UI.escapar(unidadDe(item))})</span>
+            <input class="item-carrito-cantidad" type="number" min="${unidadDe(item) === 'Unidad' ? '1' : '0.001'}" step="${unidadDe(item) === 'Unidad' ? '1' : '0.001'}" max="${MAX_CANTIDAD}" value="${item.cantidad !== '' && Number.isFinite(Number(item.cantidad)) ? item.cantidad : ''}" data-cantidad-editar="${indice}" aria-label="Cantidad de ${UI.escapar(item.nombre)}">
+          </label>
+          <button class="btn-cantidad" data-cantidad="${indice}" data-delta="1" aria-label="Aumentar cantidad">+</button>
         </div>
         <div class="item-carrito-precios">
-          <span class="item-carrito-preciounit">${UI.formatoMoneda(item.precioUnitario)} c/u</span>
-          <span class="item-carrito-subtotal">${UI.formatoMoneda(item.subtotal)}</span>
+          <span class="item-carrito-preciounit">Lista: ${UI.formatoMoneda(item.precioLista ?? item.precioUnitario)} / ${UI.escapar(unidadDe(item))}</span>
+          <label class="item-carrito-precio-final">
+            Final (C$)
+            <input type="number" min="0.01" max="${MAX_PRECIO}" step="0.01" value="${precioValido(item.precioUnitario) ? item.precioUnitario : ''}" data-precio="${indice}" aria-label="Precio final de ${UI.escapar(item.nombre)}" ${precioValido(item.precioUnitario) ? '' : 'aria-invalid="true"'}>
+          </label>
+          <span class="item-carrito-subtotal">${UI.formatoMoneda(item.subtotal)} (${formatoCantidad(item.cantidad)} ${UI.escapar(unidadDe(item))})</span>
         </div>
         <button class="item-carrito-eliminar" data-eliminar="${indice}" aria-label="Eliminar">🗑</button>
       </div>
@@ -342,9 +417,88 @@ const Ventas = (function () {
     contItems.querySelectorAll('[data-cantidad]').forEach((btn) => {
       btn.addEventListener('click', () => cambiarCantidad(Number(btn.dataset.cantidad), Number(btn.dataset.delta)));
     });
+    contItems.querySelectorAll('[data-cantidad-editar]').forEach((input) => {
+      input.addEventListener('input', () => actualizarCantidadCarrito(Number(input.dataset.cantidadEditar), input));
+    });
     contItems.querySelectorAll('[data-eliminar]').forEach((btn) => {
       btn.addEventListener('click', () => eliminarDelCarrito(Number(btn.dataset.eliminar)));
     });
+    contItems.querySelectorAll('[data-precio]').forEach((input) => {
+      input.addEventListener('input', () => actualizarPrecioCarrito(Number(input.dataset.precio), input));
+    });
+  }
+
+  function actualizarCantidadCarrito(indice, input) {
+    const item = carrito[indice];
+    if (!item) return;
+    const cantidad = input.value === '' ? '' : Number(input.value);
+    let error = null;
+    try {
+      item.cantidad = VentasLogica.validarCantidad(cantidad, item.nombre, unidadDe(item));
+      if (!item.esRapido) {
+        const producto = Storage.getProducto(item.productoId);
+        if (!producto || item.cantidad > producto.stock) {
+          throw new Error(`No hay suficiente inventario disponible de "${item.nombre}".`);
+        }
+      }
+    } catch (err) {
+      item.cantidad = cantidad;
+      error = err;
+    }
+    input.setAttribute('aria-invalid', error ? 'true' : 'false');
+    recalcularSubtotal(item);
+    const fila = input.closest('.item-carrito');
+    fila.querySelector('.item-carrito-subtotal').textContent =
+      `${UI.formatoMoneda(item.subtotal)} (${formatoCantidad(item.cantidad)} ${unidadDe(item)})`;
+    actualizarTotalesCarrito();
+    persistirCarrito();
+  }
+
+  function actualizarTotalesCarrito() {
+    const totalCentavos = carrito.reduce((suma, item) => suma + Math.round((Number(item.subtotal) || 0) * 100), 0);
+    const total = totalCentavos / 100;
+    document.getElementById('carrito-peek-total').textContent = UI.formatoMoneda(total);
+    document.getElementById('carrito-total').textContent = UI.formatoMoneda(total);
+    document.getElementById('btn-confirmar-venta').disabled = carrito.length === 0 || !validarCarrito().valido || guardandoVenta;
+  }
+
+  function actualizarPrecioCarrito(indice, input) {
+    const item = carrito[indice];
+    if (!item) return;
+    item.precioUnitario = input.value === '' ? '' : Number(input.value);
+    const valido = precioValido(item.precioUnitario);
+    input.setAttribute('aria-invalid', valido ? 'false' : 'true');
+    recalcularSubtotal(item);
+    const subtotal = input.closest('.item-carrito-precios').querySelector('.item-carrito-subtotal');
+    subtotal.textContent = `${UI.formatoMoneda(item.subtotal)} (${formatoCantidad(item.cantidad)} ${unidadDe(item)})`;
+    actualizarTotalesCarrito();
+    persistirCarrito();
+  }
+
+  function validarCarrito() {
+    for (const item of carrito) {
+      if (!item.nombre || !String(item.nombre).trim()) {
+        return { valido: false, mensaje: 'Cada producto debe tener un nombre.' };
+      }
+      if (!precioValido(item.precioUnitario)) {
+        return { valido: false, mensaje: `El precio final de "${item.nombre}" debe ser mayor a cero y tener hasta dos decimales.` };
+      }
+      try {
+        const cantidad = VentasLogica.validarCantidad(item.cantidad, item.nombre, unidadDe(item));
+        if (!item.esRapido) {
+          const producto = Storage.getProducto(item.productoId);
+          if (!producto || cantidad > producto.stock) {
+            return { valido: false, mensaje: `No hay suficiente inventario disponible de "${item.nombre}".` };
+          }
+        }
+      } catch (err) {
+        return { valido: false, mensaje: err.message };
+      }
+      if (!Number.isSafeInteger(Math.round(Number(item.precioUnitario) * Number(item.cantidad) * 100))) {
+        return { valido: false, mensaje: `El subtotal de "${item.nombre}" es demasiado grande.` };
+      }
+    }
+    return { valido: true, mensaje: '' };
   }
 
   // ---- producto rapido --------------------------------------------------
@@ -352,34 +506,52 @@ const Ventas = (function () {
   function abrirModalProductoRapido() {
     const form = document.getElementById('form-producto-rapido');
     form.reset();
+    actualizarCantidadRapida();
     UI.abrirModal('modal-producto-rapido');
+  }
+
+  function actualizarCantidadRapida() {
+    const unidadMedida = document.getElementById('rapido-unidad-medida').value;
+    const permiteDecimal = VentasLogica.unidadPermiteDecimal(unidadMedida);
+    const input = document.getElementById('rapido-cantidad');
+    input.step = permiteDecimal ? '0.001' : '1';
+    input.min = permiteDecimal ? '0.001' : '1';
+    document.getElementById('rapido-cantidad-etiqueta').textContent = `Cantidad (${unidadMedida})`;
+    document.getElementById('rapido-precio-etiqueta').textContent = `Precio (C$ / ${unidadMedida})`;
   }
 
   function manejarSubmitProductoRapido(e) {
     e.preventDefault();
     const nombre = document.getElementById('rapido-nombre').value.trim();
-    const precio = Math.round(Number(document.getElementById('rapido-precio').value));
+    const precio = document.getElementById('rapido-precio').value === ''
+      ? ''
+      : Number(document.getElementById('rapido-precio').value);
+    const unidadMedida = document.getElementById('rapido-unidad-medida').value;
     const cantidad = Number(document.getElementById('rapido-cantidad').value);
 
     if (!nombre) {
       UI.mostrarToast('Escribe el nombre del producto.', 'error');
       return;
     }
-    if (!Number.isFinite(precio) || precio <= 0) {
-      UI.mostrarToast('El precio debe ser un número entero mayor a cero.', 'error');
+    if (!precioValido(precio)) {
+      UI.mostrarToast('El precio debe ser mayor a cero y tener hasta dos decimales.', 'error');
       return;
     }
-    if (!Number.isInteger(cantidad) || cantidad <= 0) {
-      UI.mostrarToast('La cantidad debe ser un número entero mayor a cero.', 'error');
+    try {
+      VentasLogica.validarCantidad(cantidad, nombre, unidadMedida);
+    } catch (err) {
+      UI.mostrarToast(err.message, 'error');
       return;
     }
 
     carrito.push({
       productoId: null,
       nombre,
-      precioUnitario: Storage.redondear(precio),
+      unidadMedida,
+      precioUnitario: redondearDinero(precio),
+      precioLista: redondearDinero(precio),
       cantidad,
-      subtotal: Storage.redondear(precio * cantidad),
+      subtotal: redondearDinero(precio * cantidad),
       esRapido: true,
     });
     persistirCarrito();
@@ -422,7 +594,6 @@ const Ventas = (function () {
       UI.mostrarToast('El stock inicial debe ser 0 o un número entero positivo.', 'error');
       return;
     }
-
     let nuevoProducto;
     try {
       nuevoProducto = await Storage.crearProducto({
@@ -430,6 +601,7 @@ const Ventas = (function () {
         categoria,
         precio,
         stock: stockInicial,
+        unidadMedida: unidadDe(item),
       });
     } catch (err) {
       UI.mostrarToast(err.message, 'error');
@@ -449,8 +621,13 @@ const Ventas = (function () {
 
   function abrirConfirmacionVenta() {
     if (carrito.length === 0) return;
-    const total = Storage.redondear(carrito.reduce((s, i) => s + i.subtotal, 0));
-    const cantidadProductos = carrito.reduce((s, i) => s + i.cantidad, 0);
+    const validacion = validarCarrito();
+    if (!validacion.valido) {
+      UI.mostrarToast(validacion.mensaje, 'error');
+      return;
+    }
+    const total = redondearDinero(carrito.reduce((s, i) => s + i.subtotal, 0));
+    const cantidadProductos = carrito.length;
 
     document.getElementById('confirmar-venta-cantidad').textContent = cantidadProductos;
     document.getElementById('confirmar-venta-total').textContent = UI.formatoMoneda(total);
@@ -475,12 +652,16 @@ const Ventas = (function () {
       });
 
       if (producto) {
-        await Storage.actualizarProducto(producto.id, { stock: producto.stock + cantidad, precio });
+        await Storage.actualizarProducto(producto.id, {
+          stock: producto.stock + cantidad,
+          precio,
+          unidadMedida: unidadDe(item),
+        });
         guardados.push(nombre);
-        return;
+        continue;
       }
 
-      await Storage.crearProducto({ nombre, categoria: 'Otros', precio, stock: cantidad });
+      await Storage.crearProducto({ nombre, categoria: 'Otros', precio, stock: cantidad, unidadMedida: unidadDe(item) });
       guardados.push(nombre);
     }
 
@@ -521,12 +702,21 @@ const Ventas = (function () {
   }
 
   async function confirmarVentaFinal() {
+    const validacion = validarCarrito();
+    if (!validacion.valido) {
+      UI.mostrarToast(validacion.mensaje, 'error');
+      return;
+    }
+    if (guardandoVenta) return;
+    guardandoVenta = true;
+    actualizarTotalesCarrito();
     const productosRapidos = carrito.filter((item) => item.esRapido);
 
     try {
       const venta = await Storage.registrarVenta(carrito);
       carrito = [];
       ventaReciente = venta;
+      guardandoVenta = false;
       UI.cerrarModal('modal-confirmar-venta');
 
       if (productosRapidos.length > 0) {
@@ -537,6 +727,7 @@ const Ventas = (function () {
 
       mostrarPantallaExito(venta);
     } catch (err) {
+      guardandoVenta = false;
       UI.cerrarModal('modal-confirmar-venta');
       UI.mostrarToast(err.message || 'No se pudo registrar la venta.', 'error');
       renderizarProductos();
@@ -566,6 +757,7 @@ const Ventas = (function () {
 
   function inicializarEventosGlobales() {
     document.getElementById('form-producto-rapido').addEventListener('submit', manejarSubmitProductoRapido);
+    document.getElementById('rapido-unidad-medida').addEventListener('change', actualizarCantidadRapida);
     document.getElementById('form-guardar-inventario').addEventListener('submit', manejarSubmitGuardarInventario);
     document.getElementById('btn-cancelar-confirmar-venta').addEventListener('click', () => UI.cerrarModal('modal-confirmar-venta'));
     document.getElementById('btn-aceptar-confirmar-venta').addEventListener('click', confirmarVentaFinal);

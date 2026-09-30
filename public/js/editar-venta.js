@@ -36,8 +36,21 @@ const EditarVenta = (function () {
     return linea.cantidadOriginal + (producto ? producto.stock : 0);
   }
 
+  function unidadDe(linea) {
+    return VentasLogica.normalizarUnidadMedida(linea.unidadMedida);
+  }
+
+  function decimal(texto) {
+    return Number(texto).toLocaleString('es-NI', { maximumFractionDigits: 3 });
+  }
+
   function cantidadValida(linea) {
-    return Number.isInteger(linea.cantidad) && linea.cantidad >= 1 && linea.cantidad <= stockDisponible(linea);
+    try {
+      const cantidad = VentasLogica.validarCantidad(linea.cantidad, linea.nombre, unidadDe(linea));
+      return cantidad <= stockDisponible(linea);
+    } catch (err) {
+      return false;
+    }
   }
 
   function subtotalDe(linea) {
@@ -57,8 +70,11 @@ const EditarVenta = (function () {
   // ---- dibujo ----------------------------------------------------------------------
 
   function mensajeDeLinea(linea) {
-    if (linea.cantidad === null || Number.isNaN(linea.cantidad)) return 'Escribe una cantidad entera de 1 en adelante.';
-    if (!Number.isInteger(linea.cantidad) || linea.cantidad < 1) return 'La cantidad debe ser un entero mayor a cero.';
+    try {
+      VentasLogica.validarCantidad(linea.cantidad, linea.nombre, unidadDe(linea));
+    } catch (err) {
+      return err.message;
+    }
     if (linea.cantidad > stockDisponible(linea)) return `No hay suficiente inventario. Máximo: ${stockDisponible(linea)}.`;
     return '';
   }
@@ -75,7 +91,8 @@ const EditarVenta = (function () {
       .map((l, i) => {
         const error = mensajeDeLinea(l);
         const maximo = stockDisponible(l);
-        const puedeSubir = Number.isInteger(l.cantidad) && l.cantidad < maximo;
+        const paso = unidadDe(l) === 'Unidad' ? 1 : 0.1;
+        const puedeSubir = cantidadValida(l) && l.cantidad + paso <= maximo;
         const detalleStock = l.esRapido
           ? '<span class="etiqueta etiqueta-rapido-mini">rápido</span>'
           : `<span class="editar-linea-stock">Máx. ${maximo}</span>`;
@@ -83,14 +100,17 @@ const EditarVenta = (function () {
         <div class="editar-linea ${error ? 'editar-linea-invalida' : ''}" data-indice="${i}">
           <div class="editar-linea-info">
             <span class="editar-linea-nombre">${UI.escapar(l.nombre)}</span>
-            <span class="editar-linea-precio">${UI.formatoMoneda(l.precioUnitario)} c/u ${detalleStock}</span>
+            <span class="editar-linea-precio">${UI.formatoMoneda(l.precioUnitario)} / ${UI.escapar(unidadDe(l))} ${detalleStock}</span>
           </div>
           <div class="editar-linea-controles">
-            <button type="button" class="btn-cantidad" data-delta="-1" aria-label="Disminuir cantidad" ${Number.isInteger(l.cantidad) && l.cantidad > 1 ? '' : 'disabled'}>−</button>
-            <input class="editar-linea-cantidad" type="number" inputmode="numeric" min="1" max="${Number.isFinite(maximo) ? maximo : ''}" step="1" value="${l.cantidad === null ? '' : l.cantidad}" aria-label="Cantidad de ${UI.escapar(l.nombre)}">
+            <button type="button" class="btn-cantidad" data-delta="-1" aria-label="Disminuir cantidad" ${cantidadValida(l) && l.cantidad > paso ? '' : 'disabled'}>−</button>
+            <label class="editar-linea-cantidad-medida">
+              <span>${UI.escapar(unidadDe(l))}</span>
+              <input class="editar-linea-cantidad" type="number" inputmode="decimal" min="${unidadDe(l) === 'Unidad' ? '1' : '0.001'}" max="${Number.isFinite(maximo) ? maximo : ''}" step="${unidadDe(l) === 'Unidad' ? '1' : '0.001'}" value="${l.cantidad === null ? '' : l.cantidad}" aria-label="Cantidad de ${UI.escapar(l.nombre)}">
+            </label>
             <button type="button" class="btn-cantidad" data-delta="1" aria-label="Aumentar cantidad" ${puedeSubir ? '' : 'disabled'}>+</button>
           </div>
-          <span class="editar-linea-subtotal">${error ? '—' : UI.formatoMoneda(subtotalDe(l))}</span>
+          <span class="editar-linea-subtotal">${error ? '—' : UI.formatoMoneda(subtotalDe(l))} (${decimal(l.cantidad)} ${UI.escapar(unidadDe(l))})</span>
           <button type="button" class="editar-linea-quitar" data-quitar aria-label="Quitar producto" title="Quitar producto">🗑</button>
           ${error ? `<p class="editar-linea-error">${UI.escapar(error)}</p>` : ''}
         </div>`;
@@ -144,14 +164,15 @@ const EditarVenta = (function () {
         const cantidadPrevia = estado.venta.items
           .filter((it) => !it.esRapido && it.productoId === p.id)
           .reduce((suma, it) => suma + it.cantidad, 0);
+        const unidadMedida = VentasLogica.normalizarUnidadMedida(p.unidadMedida);
         const sinStock = !enVenta && p.stock + cantidadPrevia <= 0;
         return `
         <button type="button" class="editar-resultado" data-agregar-producto="${UI.escapar(p.id)}" ${sinStock ? 'disabled' : ''}>
           <span>
             <span class="editar-resultado-nombre">${UI.escapar(p.nombre)}</span>
-            <span class="editar-resultado-detalle">${sinStock ? 'Agotado' : `Stock: ${p.stock}`}${enVenta ? ' · ya está en la venta' : ''}</span>
+            <span class="editar-resultado-detalle">${sinStock ? 'Agotado' : `Stock: ${decimal(p.stock)} ${UI.escapar(unidadMedida)}`}${enVenta ? ' · ya está en la venta' : ''}</span>
           </span>
-          <span class="editar-resultado-precio">${UI.formatoMoneda(enVenta ? enVenta.precioUnitario : p.precio)}</span>
+          <span class="editar-resultado-precio">${UI.formatoMoneda(enVenta ? enVenta.precioUnitario : p.precio)} / ${UI.escapar(unidadMedida)}</span>
         </button>`;
       })
       .join('');
@@ -162,9 +183,10 @@ const EditarVenta = (function () {
     if (!producto) return;
 
     const existente = estado.lineas.find((l) => !l.esRapido && l.productoId === productoId);
+    const paso = VentasLogica.unidadPermiteDecimal(producto.unidadMedida) ? 0.1 : 1;
     if (existente) {
-      if (Number.isInteger(existente.cantidad) && existente.cantidad < stockDisponible(existente)) {
-        existente.cantidad += 1;
+      if (existente.cantidad + paso <= stockDisponible(existente)) {
+        existente.cantidad += paso;
       } else {
         UI.mostrarToast(`No hay suficiente inventario disponible de "${producto.nombre}".`, 'error');
         return;
@@ -173,7 +195,7 @@ const EditarVenta = (function () {
       const cantidadPrevia = estado.venta.items
         .filter((it) => !it.esRapido && it.productoId === producto.id)
         .reduce((suma, it) => suma + it.cantidad, 0);
-      if (producto.stock + cantidadPrevia < 1) {
+      if (producto.stock + cantidadPrevia <= 0) {
         UI.mostrarToast(`No hay suficiente inventario disponible de "${producto.nombre}".`, 'error');
         return;
       }
@@ -184,8 +206,9 @@ const EditarVenta = (function () {
       estado.lineas.push({
         productoId: producto.id,
         nombre: previas.length ? previas[0].nombre : producto.nombre,
+        unidadMedida: previas.length ? previas[0].unidadMedida : producto.unidadMedida,
         precioUnitario: previas.length ? previas[0].precioUnitario : producto.precio,
-        cantidad: 1,
+        cantidad: Math.min(1, producto.stock + cantidadPrevia),
         cantidadOriginal,
         esRapido: false,
         esNueva: cantidadOriginal === 0,
@@ -213,8 +236,8 @@ const EditarVenta = (function () {
 
     const boton = evento.target.closest('.btn-cantidad');
     if (boton && !boton.disabled) {
-      const base = Number.isInteger(linea.cantidad) ? linea.cantidad : 0;
-      linea.cantidad = Math.max(1, base + Number(boton.dataset.delta));
+      const paso = unidadDe(linea) === 'Unidad' ? 1 : 0.1;
+      linea.cantidad = Math.max(paso, Math.round((linea.cantidad + Number(boton.dataset.delta) * paso) * 1000) / 1000);
       redibujar();
     }
   }
@@ -227,8 +250,7 @@ const EditarVenta = (function () {
     if (!linea) return;
 
     const texto = campo.value.trim();
-    // Number('') = 0 y Number('1e3') = 1000: se exige que sea un entero escrito con digitos.
-    linea.cantidad = /^-?\d+$/.test(texto) ? Number(texto) : null;
+    linea.cantidad = texto === '' ? null : Number(texto);
 
     // Solo se actualizan los datos de esta linea para no perder el foco del campo mientras se escribe.
     const error = mensajeDeLinea(linea);
@@ -248,10 +270,11 @@ const EditarVenta = (function () {
     }
 
     const maximo = stockDisponible(linea);
-    const enteroValido = Number.isInteger(linea.cantidad);
+    const cantidadEnRango = cantidadValida(linea);
     const botones = fila.querySelectorAll('.btn-cantidad');
-    botones[0].disabled = !(enteroValido && linea.cantidad > 1);
-    botones[1].disabled = !(enteroValido && linea.cantidad < maximo);
+    const paso = unidadDe(linea) === 'Unidad' ? 1 : 0.1;
+    botones[0].disabled = !(cantidadEnRango && linea.cantidad > paso);
+    botones[1].disabled = !(cantidadEnRango && linea.cantidad + paso <= maximo);
 
     refrescarPie();
   }
@@ -289,6 +312,7 @@ const EditarVenta = (function () {
           productoId: l.esRapido ? null : l.productoId,
           nombre: l.nombre,
           cantidad: l.cantidad,
+          unidadMedida: l.unidadMedida,
           precioUnitario: l.precioUnitario,
           esRapido: l.esRapido,
         })),
@@ -334,6 +358,7 @@ const EditarVenta = (function () {
         precioUnitario: it.precioUnitario,
         cantidad: it.cantidad,
         cantidadOriginal: it.cantidad,
+        unidadMedida: VentasLogica.normalizarUnidadMedida(it.unidadMedida),
         esRapido: !!it.esRapido,
         esNueva: false,
       })),
